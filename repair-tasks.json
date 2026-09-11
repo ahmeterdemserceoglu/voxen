@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "task": "Concurrent download index",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: concurrent downloads"
+  },
+  {
+    "id": 2,
+    "task": "Account-isolated downloads",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: account switches and delayed download"
+  },
+  {
+    "id": 3,
+    "task": "Clear listening history",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: clear then play"
+  },
+  {
+    "id": 4,
+    "task": "Reject incomplete downloads",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: truncated fallback"
+  },
+  {
+    "id": 5,
+    "task": "Respect history setting",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: disabled history"
+  },
+  {
+    "id": 6,
+    "task": "Explicit content filter",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: blocked explicit tracks"
+  },
+  {
+    "id": 7,
+    "task": "Working themes",
+    "status": "implemented_and_checked",
+    "validation": "playerUiRegression: light and AMOLED"
+  },
+  {
+    "id": 8,
+    "task": "Search request ordering",
+    "status": "implemented_and_checked",
+    "validation": "playerUiRegression: stale search response"
+  },
+  {
+    "id": 9,
+    "task": "Playlist pagination",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: continuation and deduplication"
+  },
+  {
+    "id": 10,
+    "task": "Listening rooms",
+    "status": "implemented_and_checked",
+    "validation": "playerUiRegression: room follower; Firestore emulator host permissions",
+    "device_validation": "pending",
+    "rules_deployment": "pending"
+  },
+  {
+    "id": 11,
+    "task": "Real album tracks",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: album browse id"
+  },
+  {
+    "id": 12,
+    "task": "Restore follows",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: account-safe following hydration"
+  },
+  {
+    "id": 13,
+    "task": "Profile and podcast ordering",
+    "status": "implemented_and_checked",
+    "validation": "playerUiRegression: profile and podcast responses"
+  },
+  {
+    "id": 14,
+    "task": "Modal gestures",
+    "status": "implemented_and_checked",
+    "validation": "playerUiRegression: expand, shrink, close"
+  },
+  {
+    "id": 15,
+    "task": "Cold-start widget commands",
+    "status": "implemented_and_checked",
+    "validation": "repairRegression: cold widget command after hydration",
+    "device_validation": "pending"
+  },
+  {
+    "id": 16,
+    "task": "Widget update ordering",
+    "status": "implemented_and_checked",
+    "validation": "Voxen Android assembleDebug with JDK 17; source ordering guard",
+    "device_validation": "pending"
+  }
+]

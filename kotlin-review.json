@@ -1,0 +1,62 @@
+{
+  "reviewDate": "2026-09-09",
+  "method": "Static control-flow and lifecycle review followed by focused fixes. Type checking, 49 application tests, Voxen assembleDebug, and Metrolist assembleFossDebug passed.",
+  "findings": [
+    {
+      "id": "K1",
+      "priority": "P1",
+      "component": "metrolist-native (separate Kotlin player)",
+      "file": "metrolist-native/app/src/main/kotlin/com/metrolist/music/playback/MusicService.kt",
+      "line": 1774,
+      "problem": "An earlier playQueue request can replace a newer queue after getInitialStatus returns.",
+      "trigger": "Start queue A, then B while A is loading; A completes last.",
+      "fix": "Cancel the previous load and verify a queue generation before applying results, including initialization waiters.",
+      "status": "fixed_and_built"
+    },
+    {
+      "id": "K2",
+      "priority": "P1",
+      "component": "metrolist-native (separate Kotlin player)",
+      "file": "metrolist-native/app/src/main/kotlin/com/metrolist/music/playback/MusicService.kt",
+      "line": 3159,
+      "problem": "Audio renderer recovery catches CancellationException as a failure and calls handleFinalFailure on the current player.",
+      "trigger": "Change tracks during the recovery delay; onMediaItemTransition cancels retryJob, which can stop or skip the newly selected track.",
+      "fix": "Rethrow CancellationException and verify the playback generation before recovery mutations.",
+      "status": "fixed_and_built"
+    },
+    {
+      "id": "K3",
+      "priority": "P2",
+      "component": "metrolist-native (separate Kotlin player)",
+      "file": "metrolist-native/app/src/main/kotlin/com/metrolist/music/playback/MusicService.kt",
+      "line": 2529,
+      "problem": "An in-flight continuation can append songs to a different queue; concurrent transitions can also start overlapping pagination requests.",
+      "trigger": "Change queues while nextPage is fetching; its result is accepted whenever the player is not idle.",
+      "fix": "Capture the queue and generation, serialize pagination, and discard obsolete results.",
+      "status": "fixed_and_built"
+    },
+    {
+      "id": "K4",
+      "priority": "P2",
+      "component": "Voxen Android bridge",
+      "file": "android/app/src/main/java/com/voxen/music/AudioFocusModule.kt",
+      "line": 96,
+      "problem": "The focus listener is never registered on API 26+. registerListeners only registers headphone removal; JS subscribes to audioFocusLost but never calls requestFocus, whose modern branch is empty.",
+      "trigger": "Native expo-audio loses focus while JS still records isPlaying=true. The custom focus event cannot synchronize that state.",
+      "fix": "Synchronize real expo-audio interruption state with the store without introducing a competing audio-focus owner.",
+      "limitation": "Does not prove audio continues during calls; expo-audio manages native audio focus independently. Device interruption testing is required.",
+      "status": "fixed_and_tested"
+    },
+    {
+      "id": "K5",
+      "priority": "P2",
+      "component": "Voxen Android bridge",
+      "file": "android/app/src/main/java/com/voxen/music/VoxenStreamModule.kt",
+      "line": 14,
+      "problem": "The module owns a SupervisorJob scope but never cancels it when the React module is invalidated.",
+      "trigger": "Reload or destroy the React instance while stream resolution is pending; obsolete work continues and attempts to settle the old promise.",
+      "fix": "Cancel the module scope in invalidate and preserve coroutine cancellation through error handling.",
+      "status": "fixed_and_built"
+    }
+  ]
+}
