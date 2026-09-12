@@ -1,3 +1,4 @@
+import { BulkDownloadButton } from './BulkDownloadButton';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -500,6 +501,7 @@ export const PlaylistDetailModal: React.FC = () => {
               </TouchableOpacity>
             </Animated.View>
 
+
             {/* Expanding Search Pill from Search Button */}
             <Animated.View
               style={[
@@ -676,6 +678,7 @@ export const PlaylistDetailModal: React.FC = () => {
 
           <TouchableOpacity
             style={styles.navGlassButton}
+            accessibilityLabel="Çalma listesi seçenekleri"
             onPress={() => setIsMenuOpen(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             activeOpacity={0.72}
@@ -784,6 +787,7 @@ export const PlaylistDetailModal: React.FC = () => {
                 </View>
 
                 <View style={styles.menuDivider} />
+                <BulkDownloadButton tracks={tracks} menu onStarted={() => setIsMenuOpen(false)} />
 
                 <TouchableOpacity
                   style={styles.menuRowItem}

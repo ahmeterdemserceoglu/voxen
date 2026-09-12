@@ -1,3 +1,4 @@
+import { useUiStore } from '../../store/uiStore';
 import { NativeModules, DeviceEventEmitter } from 'react-native';
 import { useMusicStore } from '../../store/musicStore';
 import type { TrackItem } from '../youtubeService';
@@ -12,6 +13,7 @@ class WidgetService {
     this.isInitialized = true;
 
     const handleAction = (action: string) => {
+      if (action === 'queue') { useUiStore.getState().openModal('queue'); return; }
       const { togglePlayPause, skipNext, skipPrevious, currentTrack, queue, history, playTrack } = useMusicStore.getState();
       if (!useMusicStore.getState().accountReady) return;
       if (!currentTrack) {
@@ -55,7 +57,8 @@ class WidgetService {
   }
 
   public update(track: TrackItem | null, isPlaying: boolean): void {
-    if (!VoxenWidget?.updateWidget) return;
+    // Android's service owns actual playback state and live widget progress.
+    if (NativeModules.VoxenPlayback || !VoxenWidget?.updateWidget) return;
 
     try {
       const title = track?.title || 'voxen';

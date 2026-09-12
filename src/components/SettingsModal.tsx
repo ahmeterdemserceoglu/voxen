@@ -1,3 +1,4 @@
+import { AdvancedPlaybackSettings } from './AdvancedPlaybackSettings';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useRef, useState, useEffect } from 'react';
 import {
@@ -221,6 +222,8 @@ export const SettingsModal: React.FC = () => {
                 </View>
               )}
             </View>
+
+            <AdvancedPlaybackSettings />
 
             {/* Content & Privacy */}
             <View style={styles.section}>

@@ -7,8 +7,12 @@
 import { NativeModules, Platform } from 'react-native';
 import type { AudioSource } from 'expo-audio';
 import { networkFetch } from './network/networkService';
+import { albumFromRuns, matchingSongTitle } from './youtube/youtubeTrackMetadata';
+import { findRelatedEndpoint, parseWatchTracks, parseCurrentTrackAlbum } from './youtube/youtubeWatchParser';
+import type { AlbumSummary } from '../models/Track';
 import type { Track } from '../models';
 import { useSettingsStore } from '../store/settingsStore';
+import { albumArtist, albumReleaseType, findBrowseHeader, isAlbumBrowseId, parseAlbumSearchResults } from './youtube/youtubeAlbumParser';
 
 export type TrackItem = Track;
 
@@ -31,6 +35,7 @@ export interface AlbumItem {
   artist: string;
   year?: string;
   thumbnailUrl: string;
+  releaseType?: 'Albüm' | 'Single' | 'EP';
 }
 
 export interface ArtistReleaseItem {
@@ -56,6 +61,8 @@ export interface ImportedPlaylistResult {
   author?: string;
   thumbnailUrl?: string;
   tracks: TrackItem[];
+  year?: string;
+  releaseType?: AlbumItem['releaseType'];
 }
 
 export interface ArtistProfileDetails {
@@ -169,6 +176,7 @@ export class YouTubeService {
               artist,
               artistName: artist,
               artists: [{ name: artist }],
+              album: albumFromRuns(flexColumns.flatMap((column: any) => column.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [])),
               thumbnail: thumbLarge,
               thumbnails: {
                 small: thumbnail.replace(/=w\d+-h\d+/, '=w120-h120'),
@@ -477,7 +485,7 @@ export class YouTubeService {
    */
   static async getAlbum(query: string, browseId?: string): Promise<ImportedPlaylistResult | null> {
     const id = browseId || (await this.searchAlbums(query))[0]?.id;
-    if (!id) return null;
+    if (!id || !isAlbumBrowseId(id)) return null;
     return this.getPlaylist(id, true);
   }
 
@@ -503,13 +511,14 @@ export class YouTubeService {
       const singleCol = data.contents?.singleColumnBrowseResultsRenderer;
 
       // Extract Header Info
-      const header =
-        twoCol?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer ||
-        data.header?.musicDetailHeaderRenderer ||
-        data.header?.musicResponsiveHeaderRenderer;
-
-      const title = header?.title?.runs?.[0]?.text || 'İçe Aktarılan Çalma Listesi';
-      const author = header?.straplineTextOne?.runs?.[0]?.text || header?.subtitle?.runs?.[0]?.text;
+      const header = findBrowseHeader(twoCol?.tabs?.[0]?.tabRenderer?.content)
+        || findBrowseHeader(singleCol?.tabs?.[0]?.tabRenderer?.content)
+        || findBrowseHeader(data.header);
+      const title = header?.title?.runs?.map((run: any) => run.text || '').join('') || 'İçe Aktarılan Çalma Listesi';
+      const subtitle = header?.subtitle?.runs || [];
+      const author = album ? albumArtist(header?.straplineTextOne?.runs || subtitle) || undefined
+        : header?.straplineTextOne?.runs?.[0]?.text || header?.subtitle?.runs?.[0]?.text;
+      const year = subtitle.find((run: any) => /^\d{4}$/.test(run.text?.trim() || ''))?.text?.trim();
       const thumbs = header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
       const thumbnailUrl = thumbs.length > 0 ? thumbs[thumbs.length - 1].url : undefined;
 
@@ -564,7 +573,8 @@ export class YouTubeService {
         const trackTitle =
           flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Bilinmeyen Şarkı';
         const artistRuns = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-        const artist = artistRuns[0]?.text || artistRuns.map((r: any) => r.text).join('') || 'Sanatçı';
+        const linkedArtists = artistRuns.filter((run: any) => run.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'));
+        const artist = linkedArtists.map((run: any) => run.text).join(', ') || (album ? author : undefined) || artistRuns[0]?.text || 'Sanatçı';
 
         const videoId =
           renderer.playlistItemData?.videoId ||
@@ -596,6 +606,7 @@ export class YouTubeService {
           artist,
           artistName: artist,
           artists: [{ name: artist }],
+          album: album ? { id: playlistId, title, artistName: author, artworkUrl: thumbnailUrl, year: year ? Number(year) : undefined } : albumFromRuns(flexColumns.flatMap((column: any) => column.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [])),
           thumbnail: thumbUrl,
           thumbnails: {
             small: thumbUrl.replace(/=w\d+-h\d+/, '=w120-h120'),
@@ -609,11 +620,14 @@ export class YouTubeService {
         });
       }
 
+      if (album && !header && tracks.length === 0) return null;
+
       return {
         id: playlistId,
         title,
         author,
         thumbnailUrl,
+        ...(album ? { year, releaseType: albumReleaseType(subtitle) } : {}),
         tracks: [...new Map(tracks.filter(t => useSettingsStore.getState().explicitContent || !t.explicit).map(t => [t.id, t])).values()],
       };
     } catch (e) {
@@ -689,81 +703,15 @@ export class YouTubeService {
    */
   static async searchAlbums(query: string): Promise<AlbumItem[]> {
     if (!query.trim()) return [];
-    try {
-      const response = await fetch(`${YTM_BASE}/search?prettyPrint=false`, {
-        method: 'POST',
-        headers: DEFAULT_HEADERS,
-        body: JSON.stringify({
-          context: DEFAULT_CONTEXT,
-          query: query.trim(),
-          params: 'EgWKAQIBAWoKEAMQBBAJEAoQBQ%3D%3D', // Albums filter in YTM
-        }),
-      });
-
-      if (!response.ok) {
-        return this.fallbackSearchAlbums(query);
-      }
-
-      const data = await response.json();
-      const albums: AlbumItem[] = [];
-      const sectionList =
-        data.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents ||
-        data.contents?.sectionListRenderer?.contents ||
-        [];
-
-      for (const section of sectionList) {
-        const shelf = section.musicShelfRenderer;
-        if (!shelf?.contents) continue;
-
-        for (const item of shelf.contents) {
-          const r = item.musicResponsiveListItemRenderer;
-          if (!r) continue;
-
-          const flexColumns = r.flexColumns || [];
-          const title =
-            flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-          const artistRuns = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-          const artist = artistRuns[0]?.text || 'Bilinmeyen Sanatçı';
-          const year = artistRuns.slice(-1)[0]?.text;
-
-          const thumbnails =
-            r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
-          const thumb = thumbnails[thumbnails.length - 1]?.url || '';
-
-          if (title && thumb) {
-            albums.push({
-              id: (r.navigationEndpoint?.browseEndpoint?.browseId || title).toLowerCase().replace(/[^a-z0-9]/g, '-'),
-              title,
-              artist,
-              year: /^\d{4}$/.test(year) ? year : undefined,
-              thumbnailUrl: thumb.replace(/=w\d+-h\d+/, '=w500-h500'),
-            });
-          }
-        }
-      }
-
-      return albums.length > 0 ? albums : this.fallbackSearchAlbums(query);
-    } catch {
-      return this.fallbackSearchAlbums(query);
-    }
-  }
-
-  private static async fallbackSearchAlbums(query: string): Promise<AlbumItem[]> {
-    const tracks = await this.search(`${query} full albüm`);
-    const unique = new Map<string, AlbumItem>();
-    tracks.forEach((t) => {
-      const albumTitle = t.title.replace(/\b(full|album|albüm|official|video|audio)\b/gi, '').trim();
-      const key = `${albumTitle}_${t.artist}`.toLowerCase();
-      if (!unique.has(key)) {
-        unique.set(key, {
-          id: t.id,
-          title: albumTitle || t.title,
-          artist: t.artist,
-          thumbnailUrl: t.thumbnail,
-        });
-      }
+    const response = await networkFetch(`${YTM_BASE}/search?prettyPrint=false`, {
+      method: 'POST', headers: DEFAULT_HEADERS,
+      body: JSON.stringify({
+        context: DEFAULT_CONTEXT, query: query.trim(),
+        params: 'EgWKAQIYAWoKEAMQBBAJEAoQBQ%3D%3D',
+      }),
     });
-    return Array.from(unique.values()).slice(0, 15);
+    if (!response.ok) throw new Error('Albüm araması yüklenemedi');
+    return parseAlbumSearchResults(await response.json());
   }
 
   /**
@@ -1124,6 +1072,7 @@ export class YouTubeService {
           artist,
           artistName: artist,
           artists: [{ name: artist }],
+          album: albumFromRuns(artistRuns),
           thumbnail: thumbUrl,
           thumbnails: {
             small: thumbUrl.replace(/=w\d+-h\d+/, '=w120-h120'),
@@ -1148,117 +1097,43 @@ export class YouTubeService {
   static async getRelatedTracks(videoId: string): Promise<TrackItem[]> {
     if (!videoId) return [];
     try {
-      const nextRes = await fetch(`${YTM_BASE}/next`, {
-        method: 'POST',
-        headers: DEFAULT_HEADERS,
-        body: JSON.stringify({
-          context: DEFAULT_CONTEXT,
-          videoId,
-        }),
-      });
-
-      if (!nextRes.ok) return [];
-      const nextData = await nextRes.json();
-      const tabs = nextData?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs;
-      if (!tabs || !Array.isArray(tabs)) return [];
-
-      let relatedBrowseEndpoint: { browseId?: string } | null = null;
-      for (const tab of tabs) {
-        const tr = tab?.tabRenderer;
-        if (!tr || tr.unselectable) continue;
-        const title = tr.title?.toLowerCase() || '';
-        if (title.includes('ilgili') || title.includes('related')) {
-          relatedBrowseEndpoint = tr.endpoint?.browseEndpoint;
-          break;
-        }
-      }
-
-      if (!relatedBrowseEndpoint && tabs[2]?.tabRenderer?.endpoint?.browseEndpoint) {
-        relatedBrowseEndpoint = tabs[2].tabRenderer.endpoint.browseEndpoint;
-      }
-
-      if (!relatedBrowseEndpoint?.browseId) return [];
-
-      const browseRes = await fetch(`${YTM_BASE}/browse`, {
-        method: 'POST',
-        headers: DEFAULT_HEADERS,
-        body: JSON.stringify({
-          context: DEFAULT_CONTEXT,
-          browseId: relatedBrowseEndpoint.browseId,
-        }),
-      });
-
-      if (!browseRes.ok) return [];
-      const browseData = await browseRes.json();
-      const sectionList = browseData?.contents?.sectionListRenderer?.contents || [];
-      const tracks: TrackItem[] = [];
-
-      for (const section of sectionList) {
-        const shelf = section.musicCarouselShelfRenderer || section.musicShelfRenderer;
-        if (!shelf?.contents) continue;
-
-        for (const item of shelf.contents) {
-          const twoRow = item.musicTwoRowItemRenderer;
-          const respList = item.musicResponsiveListItemRenderer;
-
-          if (twoRow) {
-            const vId = twoRow.navigationEndpoint?.watchEndpoint?.videoId;
-            const title = twoRow.title?.runs?.[0]?.text;
-            const artist = twoRow.subtitle?.runs?.[0]?.text || 'Sanatçı';
-            const thumbs = twoRow.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
-            const thumbUrl = thumbs[thumbs.length - 1]?.url?.replace(/=w\d+-h\d+/, '=w500-h500') || '';
-
-            if (vId && title && thumbUrl) {
-              tracks.push({
-                id: vId,
-                videoId: vId,
-                title,
-                artist,
-                artistName: artist,
-                artists: [{ name: artist }],
-                thumbnail: thumbUrl,
-                thumbnails: {
-                  small: thumbUrl,
-                  medium: thumbUrl,
-                  large: thumbUrl,
-                },
-                source: 'youtube',
-              });
-            }
-          } else if (respList) {
-            const flexColumns = respList.flexColumns || [];
-            const vId = respList.playlistItemData?.videoId || respList.navigationEndpoint?.watchEndpoint?.videoId;
-            const title = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-            const artist = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Sanatçı';
-            const thumbs = respList.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
-            const thumbUrl = thumbs[thumbs.length - 1]?.url?.replace(/=w\d+-h\d+/, '=w500-h500') || '';
-
-            if (vId && title && thumbUrl) {
-              tracks.push({
-                id: vId,
-                videoId: vId,
-                title,
-                artist,
-                artistName: artist,
-                artists: [{ name: artist }],
-                thumbnail: thumbUrl,
-                thumbnails: {
-                  small: thumbUrl,
-                  medium: thumbUrl,
-                  large: thumbUrl,
-                },
-                source: 'youtube',
-              });
-            }
+      const next = await networkFetch(`${YTM_BASE}/next`, { method: 'POST', headers: DEFAULT_HEADERS, retries: 0,
+        body: JSON.stringify({ context: DEFAULT_CONTEXT, videoId }) });
+      if (next.ok) {
+        const data = await next.json();
+        const endpoint = findRelatedEndpoint(data);
+        if (endpoint?.browseId) {
+          const browse = await networkFetch(`${YTM_BASE}/browse`, { method: 'POST', headers: DEFAULT_HEADERS, retries: 0,
+            body: JSON.stringify({ context: DEFAULT_CONTEXT, ...endpoint }) });
+          if (browse.ok) {
+            const tracks = parseWatchTracks(await browse.json(), videoId);
+            if (tracks.length) return tracks;
           }
         }
       }
+    } catch (error) { console.warn('YouTubeService.getRelatedTracks error:', error); }
+    return this.getAutomix(videoId);
+  }
 
-      return tracks;
-    } catch (err) {
-      console.warn('YouTubeService.getRelatedTracks error:', err);
-      return [];
-    }
+  /** Resolve the release attached to this song, never a guessed artist album. */
+  static async getTrackAlbum(track: Track): Promise<AlbumSummary | null> {
+    const existing = typeof track.album === 'object' ? track.album : undefined;
+    if (existing?.id && isAlbumBrowseId(existing.id)) return existing;
+    const videoId = track.videoId || track.id;
+    try {
+      const next = await networkFetch(`${YTM_BASE}/next`, { method: 'POST', headers: DEFAULT_HEADERS, retries: 0,
+        body: JSON.stringify({ context: DEFAULT_CONTEXT, videoId }) });
+      if (next.ok) {
+        const album = parseCurrentTrackAlbum(await next.json(), videoId);
+        if (album) return album;
+      }
+    } catch {}
+    const matches = await this.search(`${track.title} ${track.artist || track.artistName || ''}`);
+    const same = matches.find(item => item.id === videoId && typeof item.album === 'object' && item.album.id)
+      || matches.find(item => typeof item.album === 'object' && item.album.id
+        && matchingSongTitle(item.title) === matchingSongTitle(track.title)
+        && matchingSongTitle(item.artist).includes(matchingSongTitle(track.artist || track.artistName || '')));
+    return same && typeof same.album === 'object' ? same.album : null;
   }
 
   /**

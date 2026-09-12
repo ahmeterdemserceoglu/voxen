@@ -19,6 +19,14 @@ class MainActivity : ReactActivity() {
     super.onCreate(null)
   }
 
+  override fun onNewIntent(intent: android.content.Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    intent.getStringExtra("widget_action")?.let { action ->
+      if (com.voxen.music.widget.VoxenWidgetModule.dispatchActive(action)) intent.removeExtra("widget_action")
+    }
+  }
+
   /**
    * Returns the name of the main component registered from JavaScript. This is used to schedule
    * rendering of the component.

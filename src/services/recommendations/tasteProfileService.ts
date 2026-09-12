@@ -1,4 +1,4 @@
-﻿import { accountStorage as AsyncStorage, accountSession } from '../auth/accountStorage';
+import { accountStorage as AsyncStorage, accountSession } from '../auth/accountStorage';
 import { STORAGE_KEYS } from '../../constants/storageKeys';
 import { logger } from '../../utils/logger';
 import {
@@ -13,8 +13,10 @@ const TAG = 'TasteProfileService';
 let memProfile: TasteProfile | null = null;
 let profileGeneration = -1;
 let pendingRecord: Promise<void> = Promise.resolve();
+const listeners = new Set<() => void>();
 
 export const tasteProfileService = {
+  subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   load: async (): Promise<TasteProfile> => {
     const epoch = accountSession.generation;
     if (profileGeneration !== epoch) { memProfile = null; profileGeneration = epoch; }
@@ -51,6 +53,7 @@ export const tasteProfileService = {
       const profile = await tasteProfileService.load();
       if (!accountSession.isCurrent(epoch)) return;
       await tasteProfileService.save(applyInteraction(profile, interaction, artistName, genre, trackId));
+      if (interaction !== 'PLAY' && accountSession.isCurrent(epoch)) listeners.forEach(listener => listener());
     });
     pendingRecord = operation.catch(err => logger.warn(TAG, 'Failed to record interaction', err));
     await pendingRecord;
@@ -61,5 +64,6 @@ export const tasteProfileService = {
   reset: async (): Promise<void> => {
     memProfile = createEmptyTasteProfile();
     await AsyncStorage.removeItem(STORAGE_KEYS.TASTE_PROFILE);
+    listeners.forEach(listener => listener());
   },
 };

@@ -87,11 +87,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk 37
 
+    testBuildType 'release'
     namespace 'com.voxen.music'
     defaultConfig {
         applicationId 'com.voxen.music'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        testInstrumentationRunner "com.voxen.music.playback.PlaybackInstrumentation"
         versionCode 1
         versionName "1.0.0"
 
@@ -164,6 +166,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.github.MetrolistGroup.innertubex:innertubex-android:v0.5.2")

@@ -7,7 +7,7 @@ import com.facebook.react.uimanager.ViewManager
 
 class VoxenPlaybackPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-        listOf(VoxenPlaybackModule(reactContext))
+        listOf(VoxenPlaybackModule(reactContext), com.voxen.music.download.VoxenDownloadModule(reactContext))
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
         emptyList()

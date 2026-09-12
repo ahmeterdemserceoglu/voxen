@@ -20,15 +20,24 @@ class VoxenPlaybackModule(private val reactContext: ReactApplicationContext) : R
     }
 
     @ReactMethod
-    fun setQueue(queueJson: String, index: Double, play: Boolean, localUri: String?) {
+    fun setQueue(queueJson: String, index: Double, play: Boolean, localUri: String?, position: Double, restart: Boolean, commandId: Double) {
         send(VoxenPlaybackService.ACTION_SET_QUEUE) {
             putExtra(VoxenPlaybackService.EXTRA_QUEUE_JSON, queueJson)
             putExtra(VoxenPlaybackService.EXTRA_INDEX, index.toInt())
             putExtra(VoxenPlaybackService.EXTRA_PLAY, play)
             putExtra(VoxenPlaybackService.EXTRA_LOCAL_URI, localUri)
+            putExtra(VoxenPlaybackService.EXTRA_POSITION, position.toLong())
+            putExtra(VoxenPlaybackService.EXTRA_RESTART, restart)
+            putExtra(VoxenPlaybackService.EXTRA_COMMAND, commandId.toLong())
         }
     }
 
+    @ReactMethod fun setShuffleFlag(value: Boolean) = send(VoxenPlaybackService.ACTION_SHUFFLE_FLAG) { putExtra(VoxenPlaybackService.EXTRA_SHUFFLE, value) }
+    @ReactMethod fun configureAudio(json: String) = send(VoxenPlaybackService.ACTION_SETTINGS) { putExtra(VoxenPlaybackService.EXTRA_SETTINGS, json) }
+    @ReactMethod fun getEqualizerSupport(promise: Promise) { promise.resolve(runCatching {
+        android.media.audiofx.AudioEffect.queryEffects().any { it.type == android.media.audiofx.AudioEffect.EFFECT_TYPE_EQUALIZER }
+    }.getOrDefault(false)) }
+    @ReactMethod fun setRepeatMode(mode: String) = send(VoxenPlaybackService.ACTION_REPEAT) { putExtra(VoxenPlaybackService.EXTRA_REPEAT, mode) }
     @ReactMethod fun play() = send(VoxenPlaybackService.ACTION_PLAY)
     @ReactMethod fun pause() = send(VoxenPlaybackService.ACTION_PAUSE)
     @ReactMethod fun toggle() = send(VoxenPlaybackService.ACTION_TOGGLE)
@@ -45,7 +54,14 @@ class VoxenPlaybackModule(private val reactContext: ReactApplicationContext) : R
             service?.refreshState()
             promise.resolve(Arguments.createMap().apply {
                 putBoolean("serviceAvailable", service != null)
+                putArray("queueIds", Arguments.fromList(PlaybackStateHolder.queueIds))
+                putArray("shuffleOrderIds", Arguments.fromList(PlaybackStateHolder.shuffleOrderIds))
+                putBoolean("shuffle", PlaybackStateHolder.shuffle)
+                putString("repeatMode", PlaybackStateHolder.repeatMode)
+                putDouble("commandId", PlaybackStateHolder.commandId.toDouble())
                 putBoolean("isPlaying", PlaybackStateHolder.isPlaying)
+                putBoolean("isLoading", PlaybackStateHolder.isLoading)
+                putBoolean("isBuffering", PlaybackStateHolder.isBuffering)
                 putBoolean("wantsToPlay", PlaybackStateHolder.wantsToPlay)
                 putDouble("position", PlaybackStateHolder.position.toDouble())
                 putDouble("duration", PlaybackStateHolder.duration.toDouble())

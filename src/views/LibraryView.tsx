@@ -1,3 +1,4 @@
+import { DownloadStoragePanel } from '../components/DownloadStoragePanel';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useState, useMemo } from 'react';
 import {
@@ -36,7 +37,7 @@ const GRID_SPACING = 12;
 const HORIZONTAL_PADDING = 16;
 const CARD_WIDTH = Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - GRID_SPACING) / 2);
 
-type SubTabKey = 'all' | 'playlists' | 'favorites' | 'downloads' | 'artists' | 'history';
+type SubTabKey = 'all' | 'playlists' | 'favorites' | 'downloads' | 'artists' | 'albums' | 'history';
 type ViewMode = 'grid' | 'list';
 type SortOrder = 'recent' | 'alphabetical' | 'tracks';
 
@@ -95,8 +96,8 @@ export const LibraryView: React.FC = () => {
     openPlaylistDetail,
     openActionSheet,
   } = useMusicStore();
-  const { followedArtists, unfollowArtist, clearHistory } = useLibraryStore();
-  const { openArtist, setActiveTab } = useUiStore();
+  const { followedArtists, unfollowArtist, clearHistory, savedAlbums, removeAlbum } = useLibraryStore();
+  const { openArtist, openAlbum, setActiveTab } = useUiStore();
   const { user } = useAuthStore();
 
   const handleCreatePlaylist = async () => {
@@ -497,6 +498,10 @@ export const LibraryView: React.FC = () => {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity style={[styles.chip, activeSubTab === 'albums' && styles.chipActive]} onPress={() => setActiveSubTab('albums')}>
+            <Text style={[styles.chipText, activeSubTab === 'albums' && styles.chipTextActive]}>Albümler</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.chip, activeSubTab === 'artists' && styles.chipActive]}
             onPress={() => setActiveSubTab('artists')}
@@ -673,6 +678,7 @@ export const LibraryView: React.FC = () => {
           </View>
         )}
 
+        {activeSubTab === 'downloads' && <DownloadStoragePanel onTracksChanged={setDownloadedTracks} />}
         {/* TAB: DOWNLOADS */}
         {activeSubTab === 'downloads' && (
           <View style={{ flex: 1 }}>
@@ -720,6 +726,17 @@ export const LibraryView: React.FC = () => {
             )}
           </View>
         )}
+
+        {activeSubTab === 'albums' && <FlatList
+          data={savedAlbums.filter(album => `${album.title} ${album.author || ''}`.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR')))}
+          keyExtractor={album => album.id} contentContainerStyle={styles.scrollPadding}
+          ListEmptyComponent={<View style={styles.emptyWrap}><Text style={styles.emptyTitle}>Kaydedilmiş albüm yok</Text><Text style={styles.emptySub}>Albüm ekranından kütüphanene kaydedebilirsin.</Text></View>}
+          renderItem={({ item }) => <TouchableOpacity onPress={() => openAlbum(item.title, item.id)} onLongPress={() => Alert.alert(item.title, 'Kütüphaneden kaldırılsın mı?', [{ text: 'Vazgeç' }, { text: 'Kaldır', style: 'destructive', onPress: () => removeAlbum(item.id) }])} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+            <Image source={{ uri: item.thumbnailUrl }} contentFit="cover" style={{ width: 72, height: 72, borderRadius: 12 }} />
+            <View style={{ flex: 1, marginLeft: 14 }}><Text style={{ color: Colors.text, fontSize: 17 }} numberOfLines={2}>{item.title}</Text><Text style={{ color: Colors.textMuted, marginTop: 4 }}>{item.author} • {item.tracks.length} parça</Text></View>
+            <Ionicons name="disc-outline" size={24} color={Colors.primary} />
+          </TouchableOpacity>}
+        />}
 
         {/* TAB: ARTISTS */}
         {activeSubTab === 'artists' && (

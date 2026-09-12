@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
+import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
 import { Colors } from '../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -58,9 +59,11 @@ export const FullPlayerModal: React.FC = () => {
     repeatMode,
     setRepeatMode,
     playTrack,
+    retryPlayback,
     setPlaybackStatus,
   } = useMusicStore();
 
+  const albumNavigation = useAlbumNavigation(currentTrack, closeFullPlayer);
   const sliderWidth = useRef(1);
   const scrubTarget = useRef(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -164,7 +167,7 @@ export const FullPlayerModal: React.FC = () => {
                     if (currentTrack) {
                       // Clear error and re-trigger load by re-playing the current track
                       setPlaybackStatus({ streamError: null });
-                      playTrack(currentTrack, queue);
+                      retryPlayback();
                     }
                   }}
                 >
@@ -195,6 +198,10 @@ export const FullPlayerModal: React.FC = () => {
             <Text style={styles.trackArtist} numberOfLines={1}>
               {currentTrack.artist}
             </Text>
+            <TouchableOpacity accessibilityLabel="Şarkının albümünü aç" disabled={albumNavigation.loading} onPress={() => { void albumNavigation.open(); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 9 }}>
+              {albumNavigation.loading ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="disc-outline" size={15} color={Colors.primary} />}
+              <Text numberOfLines={1} style={{ flexShrink: 1, color: Colors.primary, fontSize: 12 }}>{typeof currentTrack.album === 'object' ? currentTrack.album.title : currentTrack.album || 'Albümü görüntüle'}</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -335,7 +342,7 @@ export const FullPlayerModal: React.FC = () => {
 
           <TouchableOpacity
             style={styles.lyricsPill}
-            onPress={() => openModal('related')}
+            onPress={() => { closeFullPlayer(); openModal('related'); }}
             activeOpacity={0.7}
           >
             <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />

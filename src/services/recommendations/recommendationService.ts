@@ -1,3 +1,6 @@
+import { recommendationFeedback } from './recommendationFeedback';
+import { useSettingsStore } from '../../store/settingsStore';
+import type { HomeSection } from '../youtubeService';
 import { logger } from '../../utils/logger';
 import { tasteProfileService } from './tasteProfileService';
 import { topKeys } from '../../models';
@@ -50,15 +53,19 @@ export const recommendationService = {
   ): Promise<Track[]> => {
     try {
       const profile = await tasteProfileService.get();
+      const feedback = await recommendationFeedback.load();
+      const variety = useSettingsStore.getState().discoveryVariety;
       const topArtists = topKeys(profile.artists, 5);
       const topGenres = topKeys(profile.genres, 3);
 
-      const libraryArtists = [...likedTracks, ...history].map(track => track.artist || track.artistName || '');
-      const artists = [...new Set([...followedArtistNames, ...topArtists, ...libraryArtists].filter(name => name && (profile.artists[name] ?? 0) >= 0))];
+      const historyArtists = history.filter(track => (profile.tracks[track.id] ?? 0) >= 0).map(track => track.artist || track.artistName || '');
+      const likedArtists = likedTracks.map(track => track.artist || track.artistName || '');
+      const artists = [...new Set([...topArtists.filter(name => historyArtists.includes(name)), ...historyArtists, ...topArtists, ...likedArtists, ...followedArtistNames].filter(name => name && (profile.artists[name] ?? 0) >= 0))];
       const genres = [...new Set((preferredGenres.length ? preferredGenres : topGenres).filter(Boolean))];
       const queries = [...new Set([
         ...genres.slice(0, 3),
-        ...artists.slice(0, 3),
+        ...artists.slice(0, variety === 'adventurous' ? 1 : 3).map(name => variety === 'familiar' ? name : `${name} benzer şarkılar`),
+        ...(variety === 'adventurous' ? genres.slice(0, 3).map(genre => `${genre} yeni çıkan alternatif keşif`) : []),
       ])];
       if (queries.length === 0) queries.push('Türkçe Pop', 'Türkçe Alternatif');
 
@@ -81,11 +88,31 @@ export const recommendationService = {
         }
       }
 
-      return diversify(allTracks, seen).slice(0, 30);
+      return diversify(allTracks.filter(track => recommendationFeedback.allowed(track, feedback)), seen, variety === 'familiar' ? 3 : 2).slice(0, 30);
     } catch (err) {
       logger.warn(TAG, 'getDiscoveryFeed error', err);
       return [];
     }
+  },
+
+  /** Personal shelves use song radios rather than the anonymous global home feed. */
+  getPersonalizedSections: async (likedTracks: Track[], history: Track[]): Promise<HomeSection[]> => {
+    const profile = await tasteProfileService.get();
+    const feedback = await recommendationFeedback.load();
+    const candidates = [...history].sort((a, b) => (profile.tracks[b.id] || 0) - (profile.tracks[a.id] || 0));
+    const artists = new Set<string>();
+    const seeds = [...candidates, ...likedTracks].filter(track => {
+      const artist = track.artist || track.artistName || '';
+      if (!artist || artists.has(artist) || (profile.tracks[track.id] || 0) < 0 || !recommendationFeedback.allowed(track, feedback)) return false;
+      artists.add(artist); return true;
+    }).slice(0, 2);
+    const seen = new Set([...likedTracks, ...history].map(track => track.id));
+    const results = await Promise.allSettled(seeds.map(track => recommendationService.getRelatedTracks(track, new Set(seen))));
+    return results.flatMap((result, index) => {
+      if (result.status !== 'fulfilled') return [];
+      const items = result.value.filter(track => !seen.has(track.id)); items.forEach(track => seen.add(track.id));
+      return items.length ? [{ title: `${seeds[index].artist || seeds[index].artistName} dinlediğin için`, items }] : [];
+    });
   },
 
   /** Get related tracks for autoplay / radio using native YTM Automix radio */
@@ -93,10 +120,12 @@ export const recommendationService = {
     try {
       const { YouTubeService } = await import('../youtubeService');
       
+      const feedback = await recommendationFeedback.load();
+      const allowed = (tracks: Track[]) => tracks.filter(track => recommendationFeedback.allowed(track, feedback));
       // 1. Try native YouTube Music Automix Radio (RDAMVM + videoId)
       if (track.videoId || track.id) {
         const automixTracks = await YouTubeService.getAutomix(track.videoId || track.id);
-        const filteredAutomix = diversify(automixTracks, seenIds);
+        const filteredAutomix = diversify(allowed(automixTracks), seenIds);
         if (filteredAutomix.length > 0) {
           return filteredAutomix.slice(0, 20);
         }
@@ -113,7 +142,7 @@ export const recommendationService = {
       for (const r of results) {
         if (r.status === 'fulfilled') all.push(...r.value);
       }
-      return diversify(all, seenIds).slice(0, 20);
+      return diversify(allowed(all), seenIds).slice(0, 20);
     } catch (err) {
       logger.warn(TAG, 'getRelatedTracks error', err);
       return [];

@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
 import { YouTubeService, TrackItem } from '../services/youtubeService';
+import { recommendationService } from '../services/recommendations/recommendationService';
+import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
 
 export const RelatedTracksModal: React.FC = () => {
@@ -27,29 +29,34 @@ export const RelatedTracksModal: React.FC = () => {
 
   const [tracks, setTracks] = useState<TrackItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !currentTrack) return;
 
     let isMounted = true;
+    const epoch = accountSession.generation;
+    setError(false);
     setLoading(true);
     setTracks([]);
 
-    YouTubeService.getRelatedTracks(currentTrack.id)
+    YouTubeService.getRelatedTracks(currentTrack.videoId || currentTrack.id)
+      .then(async res => res.length ? res : recommendationService.getRelatedTracks(currentTrack, new Set([currentTrack.id])))
       .then((res) => {
-        if (isMounted) {
-          setTracks(res);
+        if (isMounted && accountSession.isCurrent(epoch)) {
+          setTracks([...new Map(res.filter(track => track.id !== currentTrack.id).map(track => [track.id, track])).values()]);
           setLoading(false);
         }
       })
       .catch(() => {
-        if (isMounted) setLoading(false);
+        if (isMounted && accountSession.isCurrent(epoch)) { setError(true); setLoading(false); }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, currentTrack?.id]);
+  }, [isOpen, currentTrack?.id, retry]);
 
   if (!isOpen) return null;
 
@@ -87,7 +94,8 @@ export const RelatedTracksModal: React.FC = () => {
         ) : tracks.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="disc-outline" size={48} color={Colors.textMuted} />
-            <Text style={styles.emptyText}>Henüz benzer parça bulunamadı.</Text>
+            <Text style={styles.emptyText}>{error ? 'Öneriler yüklenemedi.' : 'Bu parça için öneri bulunamadı.'}</Text>
+            <TouchableOpacity accessibilityLabel="Benzer parçaları tekrar yükle" onPress={() => setRetry(value => value + 1)} style={styles.closeBtn}><Text style={{ color: Colors.primary }}>Tekrar dene</Text></TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -99,7 +107,7 @@ export const RelatedTracksModal: React.FC = () => {
                 style={styles.trackRow}
                 activeOpacity={0.7}
                 onPress={() => {
-                  playTrack(item);
+                  void playTrack(item, tracks);
                   closeModal();
                 }}
               >
@@ -132,7 +140,7 @@ export const RelatedTracksModal: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F0F0F',
+    backgroundColor: Colors.background,
     paddingHorizontal: 20,
   },
   header: {

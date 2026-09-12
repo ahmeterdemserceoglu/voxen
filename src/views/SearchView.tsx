@@ -66,6 +66,8 @@ export const SearchView: React.FC = () => {
   const [results, setResults] = useState<TrackItem[]>([]);
   const [artistResults, setArtistResults] = useState<ArtistResultItem[]>([]);
   const [albumResults, setAlbumResults] = useState<AlbumItem[]>([]);
+  const [albumSearchError, setAlbumSearchError] = useState(false);
+  const searchedQuery = useRef('');
   const [matchedArtist, setMatchedArtist] = useState<ArtistResultItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
@@ -137,6 +139,11 @@ export const SearchView: React.FC = () => {
     addRecentSearch(term.trim());
 
     const currentTab = tabOverride || activeTab;
+    if (searchedQuery.current !== term.trim()) {
+      setResults([]); setArtistResults([]); setAlbumResults([]); setMatchedArtist(null);
+      setAlbumSearchError(false);
+      searchedQuery.current = term.trim();
+    }
 
     try {
       const q = term.trim();
@@ -156,6 +163,7 @@ export const SearchView: React.FC = () => {
         setResults(tracks);
         setArtistResults(artists);
         setAlbumResults(albums);
+        setAlbumSearchError(albumsRes.status === 'rejected');
 
         if (artists.length > 0) {
           setMatchedArtist(artists[0]);
@@ -174,11 +182,15 @@ export const SearchView: React.FC = () => {
           setMatchedArtist(artists[0]);
         }
       } else if (currentTab === 'albums') {
+        setAlbumSearchError(false);
         const albums = await YouTubeService.searchAlbums(q);
         if (request !== searchRequest.current) return;
         setAlbumResults(albums);
       }
     } catch (e) {
+      if (request === searchRequest.current && currentTab === 'albums') {
+        setAlbumResults([]); setAlbumSearchError(true);
+      }
       console.warn('Search error:', e);
     } finally {
       if (request === searchRequest.current) setLoading(false);
@@ -188,6 +200,10 @@ export const SearchView: React.FC = () => {
   const handleTabChange = (tab: SearchTab) => {
     setActiveTab(tab);
     if (!query.trim()) return;
+    if (searchedQuery.current !== query.trim()) {
+      void handleSearch(query, tab);
+      return;
+    }
     if (tab === 'artists' && artistResults.length === 0) {
       handleSearch(query, tab);
     } else if (tab === 'albums' && albumResults.length === 0) {
@@ -344,7 +360,7 @@ export const SearchView: React.FC = () => {
                     {item.title}
                   </Text>
                   <Text style={styles.albumRowSub} numberOfLines={1}>
-                    {item.artist}{item.year ? ` • ${item.year}` : ''} • Albüm
+                    {item.artist}{item.year ? ` • ${item.year}` : ''} • {item.releaseType || 'Albüm'}
                   </Text>
                 </View>
                 <View style={styles.albumRowAction}>
@@ -355,7 +371,14 @@ export const SearchView: React.FC = () => {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Ionicons name="disc-outline" size={48} color={Colors.textMuted} />
-                <Text style={styles.emptyText}>"{query}" ile eşleşen albüm bulunamadı.</Text>
+                <Text style={styles.emptyText}>
+                  {albumSearchError ? 'Albümler yüklenemedi. Tekrar deneyebilirsin.' : `"${query}" ile eşleşen albüm bulunamadı.`}
+                </Text>
+                {albumSearchError && (
+                  <TouchableOpacity onPress={() => handleSearch(query, 'albums')} style={{ padding: 16 }}>
+                    <Text style={{ color: Colors.primary }}>Tekrar dene</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             }
           />

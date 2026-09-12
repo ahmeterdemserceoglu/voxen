@@ -1,3 +1,5 @@
+import { recommendationFeedback } from '../services/recommendations/recommendationFeedback';
+import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -42,6 +44,7 @@ export const SongActionSheet: React.FC = () => {
     setSourceContext,
   } = useMusicStore();
 
+  const albumNavigation = useAlbumNavigation(activeActionSong, () => { closeActionSheet(); useMusicStore.getState().closeFullPlayer(); });
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
@@ -135,19 +138,6 @@ export const SongActionSheet: React.FC = () => {
     closeActionSheet();
     const artist = activeActionSong.artist || activeActionSong.artistName;
     if (artist) openArtist(artist);
-  };
-
-  const handleViewAlbum = () => {
-    closeActionSheet();
-    const album =
-      typeof activeActionSong.album === 'string'
-        ? activeActionSong.album
-        : activeActionSong.album?.title;
-    if (album) {
-      openAlbum(album);
-    } else {
-      openAlbum(`${activeActionSong.artist || activeActionSong.artistName} Albüm`);
-    }
   };
 
   const handleStartRadio = async () => {
@@ -278,6 +268,9 @@ export const SongActionSheet: React.FC = () => {
                 </Text>
               </TouchableOpacity>
 
+              {[false, true].map(artist => <TouchableOpacity key={artist ? 'block-artist' : 'block-track'} style={styles.actionRow} onPress={() => {
+                if (activeActionSong) void recommendationFeedback.block(activeActionSong, artist).then(closeActionSheet);
+              }}><View style={styles.actionIconWrapper}><Ionicons name="ban-outline" size={22} color={Colors.text} /></View><Text style={styles.actionText}>{artist ? 'Bu sanatçıyı önerme' : 'Bu şarkıyı önerme'}</Text></TouchableOpacity>)}
               {/* Action 3: Play Next */}
               <TouchableOpacity
                 style={styles.actionRow}
@@ -318,12 +311,13 @@ export const SongActionSheet: React.FC = () => {
               <TouchableOpacity
                 style={styles.actionRow}
                 activeOpacity={0.7}
-                onPress={handleViewAlbum}
+                disabled={albumNavigation.loading}
+                onPress={() => { void albumNavigation.open(); }}
               >
                 <View style={styles.actionIconWrapper}>
                   <Ionicons name="disc-outline" size={22} color="#FFFFFF" />
                 </View>
-                <Text style={styles.actionText}>Albümü Görüntüle</Text>
+                <Text style={styles.actionText}>{albumNavigation.loading ? "Albüm bulunuyor…" : "Albümü Görüntüle"}</Text>
               </TouchableOpacity>
 
               {/* Action 7: Song Radio */}

@@ -1,3 +1,4 @@
+import { recommendationFeedback } from '../services/recommendations/recommendationFeedback';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -20,6 +21,7 @@ import { useMusicStore } from '../store/musicStore';
 import { useAuthStore } from '../store/authStore';
 import { useUiStore } from '../store/uiStore';
 import { useSocialStore } from '../store/socialStore';
+import { tasteProfileService } from '../services/recommendations/tasteProfileService';
 import { mixGenerator, DailyMix } from '../services/recommendations/mixGenerator';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLibraryStore } from '../store/libraryStore';
@@ -64,18 +66,25 @@ export const HomeView: React.FC = () => {
     });
   };
 
+  const [listeningRevision, setListeningRevision] = useState(0);
+  useEffect(() => tasteProfileService.subscribe(() => setListeningRevision(value => value + 1)), []);
+  const [feedbackRevision, setFeedbackRevision] = useState(0);
+  const discoveryVariety = useSettingsStore(state => state.discoveryVariety);
+  useEffect(() => recommendationFeedback.subscribe(() => setFeedbackRevision(value => value + 1)), []);
+
   const loadFeed = async (isRefresh = false) => {
     const id = ++requestId.current;
     try {
       await Promise.allSettled([
         Promise.all([
           recommendationService.getDiscoveryFeed(favorites, history, followedArtists.map(a => a.name), preferredGenres),
-          YouTubeService.getHomeFeed(),
-        ]).then(([feed, homeFeed]) => {
+          history.length || favorites.length ? recommendationService.getPersonalizedSections(favorites, history) : YouTubeService.getHomeFeed(),
+          recommendationFeedback.load(),
+        ]).then(([feed, homeFeed, feedback]) => {
           if (id !== requestId.current) return;
           const seen = new Set(feed.map(track => track.id));
-          const richSections = homeFeed
-            .map(section => ({ ...section, items: spreadArtists(section.items.filter(track => !seen.has(track.id))) }))
+          const richSections = (Array.isArray(homeFeed) ? homeFeed : [])
+            .map(section => ({ ...section, items: spreadArtists(section.items.filter(track => !seen.has(track.id) && recommendationFeedback.allowed(track, feedback))) }))
             .filter(section => section.items.length >= 4)
             .slice(0, 7);
           setSections([{ title: 'Hızlı Seçimler', items: feed }, ...richSections]);
@@ -101,7 +110,7 @@ export const HomeView: React.FC = () => {
     setLoading(true);
     loadFeed();
     return () => { requestId.current += 1; };
-  }, [tasteKey, user?.uid]);
+  }, [tasteKey, user?.uid, feedbackRevision, discoveryVariety, listeningRevision]);
 
   const handleRefresh = () => {
     setRefreshing(true);

@@ -1,3 +1,5 @@
+import { BulkDownloadButton } from './BulkDownloadButton';
+import { useLibraryStore } from '../store/libraryStore';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useEffect, useState } from 'react';
 import {
@@ -13,7 +15,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useUiStore } from '../store/uiStore';
 import { useMusicStore } from '../store/musicStore';
-import { YouTubeService } from '../services/youtubeService';
+import { YouTubeService, type ImportedPlaylistResult } from '../services/youtubeService';
 import { Colors } from '../constants/theme';
 import type { Track } from '../models';
 
@@ -27,41 +29,56 @@ export const AlbumDetailModal: React.FC = () => {
 
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [album, setAlbum] = useState<ImportedPlaylistResult | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
-  const albumTitle = activeAlbumQuery || 'Albüm';
+  const { savedAlbums, saveAlbum, removeAlbum } = useLibraryStore();
+  const albumTitle = album?.title || activeAlbumQuery || 'Albüm';
+  const albumId = album?.id || activeAlbumId || albumTitle;
 
   useEffect(() => {
-    if (!isOpen || !activeAlbumQuery) return;
+    if (!isOpen || (!activeAlbumQuery && !activeAlbumId)) return;
 
     let isMounted = true;
     setIsLoading(true);
     setTracks([]);
+    setAlbum(null);
+    setLoadError(null);
 
-    YouTubeService.getAlbum(activeAlbumQuery, activeAlbumId || undefined)
+    YouTubeService.getAlbum(activeAlbumQuery || '', activeAlbumId || undefined)
       .then((results) => {
         if (isMounted) {
-          setTracks(results?.tracks || []);
+          const resolved = results || useLibraryStore.getState().savedAlbums.find(item => item.id === activeAlbumId) || null;
+          setAlbum(resolved);
+          setTracks(resolved?.tracks || []);
+          if (!resolved) setLoadError('Albüm yüklenemedi. Tekrar deneyebilirsin.');
           setIsLoading(false);
         }
       })
       .catch(() => {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) {
+          const saved = useLibraryStore.getState().savedAlbums.find(item => item.id === activeAlbumId);
+          if (saved) { setAlbum(saved); setTracks(saved.tracks); }
+          else setLoadError('Albüm yüklenemedi. Tekrar deneyebilirsin.');
+          setIsLoading(false);
+        }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, activeAlbumQuery, activeAlbumId]);
+  }, [isOpen, activeAlbumQuery, activeAlbumId, retry]);
 
   const handlePlayAll = (shuffle = false) => {
     if (tracks.length === 0) return;
-    setSourceContext({ type: 'album', id: albumTitle });
+    setSourceContext({ type: 'album', id: albumId });
     const queueTracks = shuffle ? [...tracks].sort(() => Math.random() - 0.5) : tracks;
     playTrack(queueTracks[0], queueTracks);
   };
 
-  const coverImage = tracks[0]?.thumbnail || tracks[0]?.thumbnails?.large;
-  const artistName = tracks[0]?.artist || tracks[0]?.artistName || 'Çeşitli Sanatçılar';
+  const coverImage = album?.thumbnailUrl || tracks[0]?.thumbnail || tracks[0]?.thumbnails?.large;
+  const artistName = album?.author || tracks[0]?.artist || tracks[0]?.artistName || 'Çeşitli Sanatçılar';
 
   return (
     <Modal
@@ -112,26 +129,36 @@ export const AlbumDetailModal: React.FC = () => {
                   {artistName}
                 </Text>
                 <Text style={styles.albumMetaText}>
-                  Albüm • {tracks.length} parça
+                  {album?.releaseType || 'Albüm'}{album?.year ? ` • ${album.year}` : ''} • {tracks.length} parça
                 </Text>
 
                 {/* Actions: Play & Shuffle */}
                 <View style={styles.actionRow}>
                   <TouchableOpacity
-                    style={styles.shuffleBtn}
+                    style={[styles.shuffleBtn, tracks.length === 0 && { opacity: 0.4 }]}
+                    disabled={tracks.length === 0}
+                    accessibilityLabel="Albümü karışık çal"
                     onPress={() => handlePlayAll(true)}
                   >
                     <Ionicons name="shuffle" size={22} color={Colors.text} />
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.playAllBtn}
+                    style={[styles.playAllBtn, tracks.length === 0 && { opacity: 0.4 }]}
+                    disabled={tracks.length === 0}
+                    accessibilityLabel="Albümü oynat"
                     onPress={() => handlePlayAll(false)}
                   >
                     <Ionicons name="play" size={24} color="#FFF" />
                   </TouchableOpacity>
                 </View>
 
+                <TouchableOpacity disabled={!album} accessibilityLabel="Albümü kütüphaneye kaydet" onPress={() => {
+                  if (album) savedAlbums.some(item => item.id === album.id) ? removeAlbum(album.id) : saveAlbum(album);
+                }} style={{ padding: 12, alignItems: 'center' }}>
+                  <Text style={{ color: Colors.primary }}>{savedAlbums.some(item => item.id === albumId) ? 'Kütüphaneden kaldır' : 'Kütüphaneye kaydet'}</Text>
+                </TouchableOpacity>
+                <BulkDownloadButton tracks={tracks} />
                 <View style={styles.divider} />
               </View>
             }
@@ -140,7 +167,7 @@ export const AlbumDetailModal: React.FC = () => {
                 style={styles.trackRow}
                 activeOpacity={0.7}
                 onPress={() => {
-                  setSourceContext({ type: 'album', id: albumTitle });
+                  setSourceContext({ type: 'album', id: albumId });
                   playTrack(item, tracks);
                 }}
               >
@@ -165,6 +192,18 @@ export const AlbumDetailModal: React.FC = () => {
                 </TouchableOpacity>
               </TouchableOpacity>
             )}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', padding: 24 }}>
+                <Text style={{ color: Colors.textMuted, textAlign: 'center' }}>
+                  {loadError || 'Bu albümde oynatılabilir parça bulunamadı.'}
+                </Text>
+                {loadError && (
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setRetry(value => value + 1)} style={{ padding: 16 }}>
+                    <Text style={{ color: Colors.primary }}>Tekrar dene</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />

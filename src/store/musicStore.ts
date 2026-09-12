@@ -42,6 +42,7 @@ interface MusicState {
   seekToTrigger: number | null;
   streamError: string | null;
   shuffle: boolean;
+  shuffleOrder: Track[] | null;
   repeatMode: RepeatMode;
   historyQueue: Track[];
   sourceContext?: SourceContext;
@@ -57,6 +58,7 @@ interface MusicState {
 
   playTrack: (track: Track, newQueue?: Track[], remote?: boolean) => Promise<void>;
   togglePlayPause: () => void;
+  retryPlayback: () => void;
   stopPlayback: () => void;
   clearHistory: () => void;
   seekTo: (positionMs: number, remote?: boolean) => void;
@@ -69,6 +71,8 @@ interface MusicState {
   removeFromQueue: (trackId: string) => void;
   moveQueueItem: (fromIndex: number, toIndex: number) => void;
   clearQueue: () => void;
+  queueUndo: { track: Track; index: number; expiresAt: number } | null;
+  undoQueueRemoval: () => void;
   toggleShuffle: () => void;
   setRepeatMode: (mode: RepeatMode) => void;
   setSourceContext: (ctx: SourceContext | undefined) => void;
@@ -123,9 +127,20 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   seekToTrigger: null,
   streamError: null,
   shuffle: false,
+  shuffleOrder: null,
   repeatMode: 'off',
   historyQueue: [],
   sourceContext: undefined,
+  queueUndo: null,
+  undoQueueRemoval: () => {
+    if (controlledByHost()) return;
+    const undo = get().queueUndo;
+    if (!undo || undo.expiresAt <= Date.now() || get().queue.some(track => track.id === undo.track.id)) { set({ queueUndo: null }); return; }
+    const queue = [...get().queue]; queue.splice(Math.min(undo.index, queue.length), 0, undo.track);
+    continuationRevision++;
+    set({ queue, queueIndex: Math.max(0, queue.findIndex(track => track.id === get().currentTrack?.id)), queueUndo: null });
+    void get().saveSession();
+  },
   accountReady: false,
   favorites: [],
   syncMeta: { favorites: {}, deletedPlaylists: {} },
@@ -138,8 +153,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   activePlaylistDetail: null,
 
   saveSession: async () => {
-    const { currentTrack, position, duration, queue, queueIndex } = get();
-    if (!currentTrack) return;
+    const { currentTrack, position, duration, queue, queueIndex, repeatMode, shuffle, shuffleOrder } = get();
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.PLAYBACK_SESSION, JSON.stringify({
         track: currentTrack,
@@ -147,6 +161,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
         duration,
         queue,
         queueIndex,
+        repeatMode, shuffle, shuffleOrder,
       }));
     } catch (e) {
       console.warn('Failed to save playback session:', e);
@@ -158,10 +173,17 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       const sessionJson = await AsyncStorage.getItem(STORAGE_KEYS.PLAYBACK_SESSION);
       if (!sessionJson) return;
       const session = JSON.parse(sessionJson);
-      const { track, position, duration, queueIndex } = session;
+      const { position, duration, queueIndex } = session;
+      const track = session.track?.id ? session.track as Track : null;
+      const seen = new Set<string>();
+      const queue: Track[] = (Array.isArray(session.queue) ? session.queue : track ? [track] : []).filter((item: Track) => {
+        if (!item?.id || seen.has(item.id)) return false;
+        seen.add(item.id); return true;
+      });
+      if (track && !queue.some(item => item.id === track.id)) queue.push(track);
+      const modes = ['off', 'all', 'one'];
+      const restoredMode = modes.includes(session.repeatMode) ? session.repeatMode as RepeatMode : 'off';
       if (track) {
-        const queue = Array.isArray(session.queue) && session.queue.every((item: unknown) => item && typeof item === 'object')
-          ? session.queue : [track];
         const restoredIndex = queue.findIndex((item: Track) => item.id === track.id);
         set({
           currentTrack: track,
@@ -172,8 +194,12 @@ export const useMusicStore = create<MusicState>((set, get) => ({
           isPlaying: false,
           isLoadingStream: false,
           isBuffering: false,
+          repeatMode: restoredMode,
+          shuffle: !!session.shuffle,
+          shuffleOrder: Array.isArray(session.shuffleOrder) ? session.shuffleOrder : null,
         });
-      }
+      } else set({ currentTrack: null, queue, queueIndex: 0, position: 0, duration: 0, isPlaying: false,
+        isLoadingStream: false, isBuffering: false, repeatMode: restoredMode, shuffle: false, shuffleOrder: null });
     } catch (e) {
       console.warn('Failed to restore playback session:', e);
     }
@@ -245,7 +271,11 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     if (controlledByHost() && !remote) return;
     if (!useSettingsStore.getState().explicitContent && track.explicit) return;
     continuationRevision += 1;
-    const currentQ = (newQueue ? [...newQueue] : [...get().queue]).filter(t => useSettingsStore.getState().explicitContent || !t.explicit);
+    const seen = new Set<string>();
+    const currentQ = (newQueue ? [...newQueue] : [...get().queue]).filter(t => {
+      if (!t?.id || seen.has(t.id) || (!useSettingsStore.getState().explicitContent && t.explicit)) return false;
+      seen.add(t.id); return true;
+    });
     let newIndex = currentQ.findIndex((t) => t.id === track.id);
     if (newIndex === -1) {
       newIndex = currentQ.length;
@@ -279,7 +309,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const { isPlaying, currentTrack } = get();
     if (!currentTrack) return;
     if (!isPlaying && get().streamError) {
-      void get().playTrack(currentTrack, get().queue);
+      get().retryPlayback();
       return;
     }
     if (!isPlaying && get().duration > 0 && get().position >= get().duration - 100) get().seekTo(0);
@@ -287,9 +317,16 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     get().saveSession().catch(() => {});
   },
 
+  retryPlayback: () => {
+    if (controlledByHost() || !get().currentTrack) return;
+    continuationRevision += 1;
+    set({ playbackRevision: get().playbackRevision + 1, isPlaying: true, isLoadingStream: true,
+      isBuffering: true, streamError: null, seekToTrigger: null });
+  },
+
   stopPlayback: () => {
     continuationRevision += 1;
-    set({ currentTrack: null, isPlaying: false, position: 0, duration: 0, seekToTrigger: null, isLoadingStream: false, isBuffering: false, streamError: null });
+    set({ currentTrack: null, queue: [], queueIndex: 0, isPlaying: false, position: 0, duration: 0, seekToTrigger: null, isLoadingStream: false, isBuffering: false, streamError: null });
     get().saveSession().catch(() => {});
   },
 
@@ -355,7 +392,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       return;
     }
     if (queue.length === 0) return;
-    const prevIndex = (queueIndex - 1 + queue.length) % queue.length;
+    const prevIndex = queueIndex > 0 ? queueIndex - 1 : (get().repeatMode === 'all' ? queue.length - 1 : 0);
     const prevTrack = queue[prevIndex];
     if (prevTrack) {
       get().playTrack(prevTrack, queue);
@@ -372,14 +409,20 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   },
 
   addToQueue: (track) => {
+    if (controlledByHost()) return;
     const queue = [...get().queue];
     if (!queue.some((t) => t.id === track.id)) {
       queue.push(track);
+      if (!useSettingsStore.getState().explicitContent && track.explicit) return;
+      continuationRevision += 1;
       set({ queue });
+      void get().saveSession();
     }
   },
 
   playNext: (track) => {
+    if (controlledByHost() || (!useSettingsStore.getState().explicitContent && track.explicit)) return;
+    continuationRevision += 1;
     const queue = [...get().queue];
     const { currentTrack } = get();
     if (track.id === currentTrack?.id) return;
@@ -388,45 +431,65 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const insertAt = queueIndex + 1;
     filtered.splice(insertAt, 0, track);
     set({ queue: filtered, queueIndex: Math.max(0, queueIndex) });
+    void get().saveSession();
   },
 
   removeFromQueue: (trackId) => {
-    const { queue, queueIndex, currentTrack } = get();
-    const targetIndex = queue.findIndex((t) => t.id === trackId);
-    if (targetIndex === -1) return;
-    const updated = queue.filter((_, i) => i !== targetIndex);
-    const newIndex = targetIndex < queueIndex ? Math.max(0, queueIndex - 1) : queueIndex;
-    set({ queue: updated, queueIndex: newIndex });
+    if (controlledByHost()) return;
+    const { queue, queueIndex, currentTrack, isPlaying } = get();
+    const targetIndex = queue.findIndex(t => t.id === trackId);
+    if (targetIndex < 0) return;
+    continuationRevision += 1;
+    const updated = queue.filter(t => t.id !== trackId);
+    set({ queueUndo: { track: queue[targetIndex], index: targetIndex, expiresAt: Date.now() + 8000 } });
     if (currentTrack?.id === trackId) {
-      const next = updated[newIndex];
-      if (next) get().playTrack(next, updated);
-      else set({ currentTrack: null, isPlaying: false });
+      const nextIndex = Math.min(queueIndex, Math.max(0, updated.length - 1));
+      const next = updated[nextIndex] || null;
+      set({ queue: updated, queueIndex: nextIndex, currentTrack: next,
+        playbackRevision: get().playbackRevision + 1, position: 0, duration: (next?.duration || 0) * 1000,
+        isPlaying: !!next && isPlaying, isLoadingStream: !!next && isPlaying,
+        isBuffering: !!next && isPlaying, streamError: null, seekToTrigger: null });
+    } else {
+      set({ queue: updated, queueIndex: Math.max(0, updated.findIndex(t => t.id === currentTrack?.id)) });
     }
+    void get().saveSession();
   },
 
   moveQueueItem: (fromIndex, toIndex) => {
+    if (controlledByHost() || !Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
     const queue = [...get().queue];
-    if (fromIndex < 0 || toIndex < 0 || fromIndex >= queue.length || toIndex >= queue.length) return;
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= queue.length || toIndex >= queue.length) return;
+    continuationRevision += 1;
     const [moved] = queue.splice(fromIndex, 1);
     queue.splice(toIndex, 0, moved);
     const { currentTrack } = get();
-    const newIndex = currentTrack ? queue.findIndex((t) => t.id === currentTrack.id) : 0;
-    set({ queue, queueIndex: Math.max(0, newIndex) });
+    set({ queue, queueIndex: Math.max(0, queue.findIndex(t => t.id === currentTrack?.id)) });
+    void get().saveSession();
   },
 
   clearQueue: () => {
+    if (controlledByHost()) return;
     continuationRevision += 1;
-    set({ queue: [], queueIndex: 0, currentTrack: null, isPlaying: false });
+    const current = get().currentTrack;
+    set({ queue: current ? [current] : [], queueIndex: 0 });
+    void get().saveSession();
   },
 
   toggleShuffle: () => {
     const state = get();
-    if (state.shuffle) { set({ shuffle: false }); return; }
+    if (state.shuffle) {
+      continuationRevision += 1;
+      const rank = new Map((state.shuffleOrder || []).map((track, index) => [track.id, index]));
+      const ordered = [...state.queue].sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+      set({ shuffle: false, shuffleOrder: null, queue: ordered, queueIndex: Math.max(0, ordered.findIndex(t => t.id === state.currentTrack?.id)) });
+      void get().saveSession();
+      return;
+    }
     const current = state.currentTrack;
     if (!current) { set({ shuffle: true }); return; }
     const revision = ++continuationRevision;
     const queue = shuffledQueue(state.queue, current);
-    set({ shuffle: true, queue, queueIndex: 0 });
+    set({ shuffle: true, shuffleOrder: state.queue, queue, queueIndex: 0 });
     void get().saveSession();
     const ids = new Set(queue.map(track => track.id));
     const fromLibrary = queue.every(track => state.favorites.some(item => item.id === track.id))
@@ -442,7 +505,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       void get().saveSession();
     })().catch(() => {});
   },
-  setRepeatMode: (mode) => set({ repeatMode: mode }),
+  setRepeatMode: (mode) => { set({ repeatMode: mode }); void get().saveSession(); },
   setSourceContext: (ctx) => set({ sourceContext: ctx }),
 
   toggleFavorite: (track) => {

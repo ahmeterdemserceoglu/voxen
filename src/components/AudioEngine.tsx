@@ -1,3 +1,6 @@
+import { ListeningTracker } from '../services/recommendations/ListeningTracker';
+import { accountStorage } from '../services/auth/accountStorage';
+import { STORAGE_KEYS } from '../constants/storageKeys';
 import React, { useEffect } from 'react';
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { setAudioModeAsync, createAudioPlayer, type AudioStatus } from 'expo-audio';
@@ -130,6 +133,8 @@ const TrackPlayer: React.FC<{ track: Track; revision: number }> = ({ track, revi
       else applyVolume();
     });
     player.pause();
+    const start = useMusicStore.getState();
+    if (start.position > 0 && start.seekToTrigger === null) useMusicStore.setState({ seekToTrigger: start.position, seekRevision: start.seekRevision + 1 });
     useMusicStore.setState({ isLoadingStream: true, isBuffering: true, streamError: null });
     watchdog = setTimeout(fail, 20000);
     (async () => {
@@ -172,32 +177,73 @@ const AndroidNativeAudioEngine: React.FC = () => {
     const native = NativeModules.VoxenPlayback;
     if (!native) return;
     let disposed = false;
-    let lastNativeTrackId: string | null = null;
     let applyingNativeState = false;
     let queueRevision = 0;
     let pendingTrackId: string | null = null;
     let statusRevision = 0;
+    let expectedCommand: number | null = null;
+    let pendingSeek: { target: number; deadline: number } | null = null;
+    let listeningGeneration = accountSession.generation;
+    const listening = new ListeningTracker((event, track) => {
+      if (!useSettingsStore.getState().historyEnabled || !accountSession.isCurrent(listeningGeneration)) return;
+      void tasteProfileService.record(event, track.artist || track.artistName, undefined, track.id);
+      if (event === 'PLAY' && useMusicStore.getState().history[0]?.id !== track.id) {
+        const history = [track, ...useMusicStore.getState().history.filter(item => item.id !== track.id)].slice(0, 30);
+        useMusicStore.setState({ history });
+        void accountStorage.capture().setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history)).catch(() => {});
+      }
+    });
+
+    let lastAudioSettings = "";
+    const syncAudioSettings = () => {
+      const settings = useSettingsStore.getState();
+      const audioSettings = JSON.stringify({ normalizeVolume: settings.normalizeVolume, crossfade: settings.crossfade,
+        crossfadeDuration: settings.crossfadeDuration, equalizerEnabled: settings.equalizerEnabled,
+        equalizerBands: settings.equalizerBands, sleepTimerDeadline: settings.sleepTimerDeadline, sleepTimerTrackEnd: settings.sleepTimerTrackEnd });
+      if (audioSettings !== lastAudioSettings) { lastAudioSettings = audioSettings; native.configureAudio?.(audioSettings); }
+    };
+    syncAudioSettings();
+    const settingsSub = useSettingsStore.subscribe(syncAudioSettings);
 
     const applyState = (status: any) => {
-      if (disposed || !status) return;
+      if (disposed || !status || status.serviceAvailable === false) return;
+      if (expectedCommand !== null && status.commandId !== undefined && status.commandId !== expectedCommand) return;
       if (pendingTrackId && status.trackId !== pendingTrackId) return;
+      if (status.sleepCleared) void useSettingsStore.getState().updateSettings({ sleepTimerDeadline: 0, sleepTimerTrackEnd: false });
       const store = useMusicStore.getState();
-      const index = store.queue.findIndex(track => track.id === status.trackId);
+      const byId = new Map(store.queue.map(track => [track.id, track]));
+      const ids = status.queueIds as string[] | undefined;
+      const orderChanged = ids?.length === store.queue.length && ids.some((id, i) => id !== store.queue[i].id) && ids.every(id => byId.has(id));
+      const nativeQueue = orderChanged ? ids!.map(id => byId.get(id)!) : store.queue;
+      const index = nativeQueue.findIndex(track => track.id === status.trackId);
       if (index < 0) return;
       pendingTrackId = null;
-      const nativeTrack = store.queue[index];
-      lastNativeTrackId = status.trackId || nativeTrack?.id || null;
+      const nativeTrack = nativeQueue[index];
+      let position = Number(status.position || 0);
+      if (pendingSeek) {
+        if (Math.abs(position - pendingSeek.target) < 1500 || Date.now() >= pendingSeek.deadline) pendingSeek = null;
+        else position = store.position;
+      }
       applyingNativeState = true;
       try { useMusicStore.setState({
+        queue: nativeQueue,
+        shuffle: typeof status.shuffle === 'boolean' ? status.shuffle : store.shuffle,
+        shuffleOrder: (orderChanged || status.shuffle !== store.shuffle) && status.shuffle && Array.isArray(status.shuffleOrderIds) && status.shuffleOrderIds.length ? status.shuffleOrderIds.map((id: string) => byId.get(id)).filter(Boolean) : store.shuffleOrder,
+        repeatMode: ['off', 'all', 'one'].includes(status.repeatMode) ? status.repeatMode : store.repeatMode,
         currentTrack: nativeTrack || store.currentTrack,
         queueIndex: nativeTrack ? index : store.queueIndex,
         isPlaying: !!status.wantsToPlay,
-        position: Number(status.position || 0),
-        duration: Number(status.duration || 0),
+        position,
+        duration: Number(status.duration || 0) || (nativeTrack.duration || 0) * 1000,
         isBuffering: !!status.isBuffering,
         isLoadingStream: !!status.isLoading,
         streamError: status.error || null,
       }); } finally { applyingNativeState = false; }
+      if (orderChanged || (typeof status.shuffle === 'boolean' && store.shuffle !== status.shuffle) || (status.repeatMode && store.repeatMode !== status.repeatMode) || store.currentTrack?.id !== nativeTrack.id || store.isPlaying !== !!status.wantsToPlay) void useMusicStore.getState().saveSession();
+      if (listeningGeneration !== accountSession.generation) { listening.reset(); listeningGeneration = accountSession.generation; }
+      if (useSettingsStore.getState().historyEnabled) listening.update(nativeTrack, Number(status.position || 0), Number(status.duration || 0), status.isPlaying === true && !status.isBuffering && !status.isLoading, !!pendingSeek);
+      else listening.reset();
+      if (status.ended) useMusicStore.getState().skipNext(true);
     };
 
     const emitter = new NativeEventEmitter(native);
@@ -213,12 +259,12 @@ const AndroidNativeAudioEngine: React.FC = () => {
       }).catch(() => {});
     }, 750);
 
-    const syncQueue = async () => {
+    const syncQueue = async (restart = false) => {
       const revision = ++queueRevision;
       const state = useMusicStore.getState();
-      if (!state.currentTrack || !state.queue.length) return;
-      if (lastNativeTrackId === state.currentTrack.id) return;
+      if (!state.currentTrack || !state.queue.length) { pendingTrackId = null; expectedCommand = null; native.stop?.(); return; }
       pendingTrackId = state.currentTrack.id;
+      expectedCommand = revision;
       const localUri = await offlineDownloadService.getLocalUri(state.currentTrack.id).catch(() => null);
       if (disposed || revision !== queueRevision) return;
       const latest = useMusicStore.getState();
@@ -229,11 +275,17 @@ const AndroidNativeAudioEngine: React.FC = () => {
         title: t.title,
         artist: t.artist || t.artistName || 'Unknown Artist',
         artwork: t.thumbnail || t.thumbnails?.large || t.thumbnails?.medium || '',
+        duration: (t.duration || 0) * 1000,
       })));
-      native.setQueue(queueJson, state.queueIndex, latest.isPlaying, localUri || null);
+      expectedCommand = revision;
+      native.setShuffleFlag?.(state.shuffle);
+      native.setQueue(queueJson, state.queueIndex, latest.isPlaying, localUri || null, latest.position, restart, revision);
     };
 
+    const initialRevision = queueRevision;
+    native.setRepeatMode?.(useMusicStore.getState().repeatMode);
     native.getStatus?.().then((status: any) => {
+      if (disposed || initialRevision !== queueRevision) return;
       const queue = useMusicStore.getState().queue;
       if (status?.serviceAvailable && queue.some(track => track.id === status.trackId)) applyState(status);
       else void syncQueue();
@@ -241,13 +293,15 @@ const AndroidNativeAudioEngine: React.FC = () => {
     const storeSub = useMusicStore.subscribe((state, prev) => {
       // Service reports are observations, not new playback commands.
       if (applyingNativeState) return;
-      if (state.currentTrack?.id !== prev.currentTrack?.id || state.queue !== prev.queue || state.queueIndex !== prev.queueIndex) {
-        lastNativeTrackId = null;
-        void syncQueue();
+      if (state.repeatMode !== prev.repeatMode) native.setRepeatMode?.(state.repeatMode);
+      if (state.currentTrack?.id !== prev.currentTrack?.id || state.queue !== prev.queue || state.queueIndex !== prev.queueIndex || state.playbackRevision !== prev.playbackRevision) {
+        pendingSeek = null;
+        void syncQueue(state.playbackRevision !== prev.playbackRevision);
         return;
       }
       if (state.isPlaying !== prev.isPlaying) state.isPlaying ? native.play() : native.pause();
       if (state.seekRevision !== prev.seekRevision && state.seekToTrigger !== null) {
+        pendingSeek = { target: state.seekToTrigger, deadline: Date.now() + 5000 };
         native.seek(state.seekToTrigger);
         useMusicStore.setState({ seekToTrigger: null });
       }
@@ -258,6 +312,7 @@ const AndroidNativeAudioEngine: React.FC = () => {
       clearInterval(poll);
       eventSub.remove();
       storeSub();
+      settingsSub();
     };
   }, []);
   return null;

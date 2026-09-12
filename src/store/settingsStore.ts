@@ -14,7 +14,12 @@ export interface Settings {
   normalizeVolume: boolean;
   crossfade: boolean;
   crossfadeDuration: number; // seconds, 0 = off, 2-8 = active
+  discoveryVariety: 'familiar' | 'balanced' | 'adventurous';
   gapless: boolean;
+  equalizerEnabled: boolean;
+  equalizerBands: number[];
+  sleepTimerDeadline: number;
+  sleepTimerTrackEnd: boolean;
   explicitContent: boolean;
   profileVisibility: 'public' | 'private';
   showListeningActivity: boolean;
@@ -32,7 +37,12 @@ const DEFAULT_SETTINGS: Settings = {
   normalizeVolume: false,
   crossfade: false,
   crossfadeDuration: 3,
+  discoveryVariety: 'balanced',
   gapless: false,
+  equalizerEnabled: false,
+  equalizerBands: [0, 0, 0, 0, 0],
+  sleepTimerDeadline: 0,
+  sleepTimerTrackEnd: false,
   explicitContent: true,
   profileVisibility: 'public',
   showListeningActivity: true,
@@ -90,7 +100,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       normalizeVolume: current.normalizeVolume,
       crossfade: current.crossfade,
       crossfadeDuration: current.crossfadeDuration,
+      discoveryVariety: current.discoveryVariety,
       gapless: current.gapless,
+      equalizerEnabled: current.equalizerEnabled,
+      equalizerBands: current.equalizerBands,
+      sleepTimerDeadline: current.sleepTimerDeadline,
+      sleepTimerTrackEnd: current.sleepTimerTrackEnd,
       explicitContent: current.explicitContent,
       profileVisibility: current.profileVisibility,
       showListeningActivity: current.showListeningActivity,
@@ -102,6 +117,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       updatedAt: Date.now(),
       ...partial,
     };
+    updated.equalizerBands = Array.from({ length: 5 }, (_, i) => Math.max(-12, Math.min(12, Number(updated.equalizerBands?.[i]) || 0)));
+    updated.crossfadeDuration = Math.max(2, Math.min(8, Number(updated.crossfadeDuration) || 3));
+    updated.sleepTimerDeadline = Math.max(0, Number(updated.sleepTimerDeadline) || 0);
     set(updated);
     await persist(updated);
   },

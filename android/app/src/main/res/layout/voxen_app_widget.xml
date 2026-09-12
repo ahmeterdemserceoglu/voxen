@@ -1,112 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
-    android:orientation="vertical"
-    android:padding="12dp">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:id="@+id/widget_album_art"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="@drawable/widget_art_bg"
-            android:clipToOutline="true"
-            android:contentDescription="Albüm kapağı"
-            android:scaleType="centerCrop"
-            android:src="@drawable/ic_widget_music_note" />
-
-        <LinearLayout
-            android:id="@+id/widget_info_container"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:orientation="vertical">
-            <TextView
-                android:id="@+id/widget_track_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif-medium"
-                android:maxLines="1"
-                android:text="voxen"
-                android:textColor="#FFFFFFFF"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/widget_track_artist"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text="Müzik başlatın"
-                android:textColor="#FFB6B6C3"
-                android:textSize="12sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg" android:orientation="vertical" android:padding="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:layout_marginBottom="6dp">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="voxen" android:textColor="#FF6158" android:textSize="13sp" android:fontFamily="sans-serif-black" android:letterSpacing="0.08" />
+        <TextView android:id="@+id/widget_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MÜZİĞİN HAZIR" android:textColor="#AEB0BF" android:textSize="9sp" android:letterSpacing="0.1" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:id="@+id/widget_album_art" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_art_bg" android:clipToOutline="true" android:contentDescription="Albüm kapağı" android:scaleType="centerCrop" android:src="@drawable/ic_widget_music_note" />
+        <LinearLayout android:id="@+id/widget_info_container" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
+            <TextView android:id="@+id/widget_track_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:maxLines="2" android:text="Müziğine dön" android:textColor="#F7F7FC" android:textSize="18sp" />
+            <TextView android:id="@+id/widget_track_artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="end" android:maxLines="1" android:text="Bir şarkı seç ve başla" android:textColor="#AEB0BF" android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="8dp"
-        android:gravity="center"
-        android:orientation="horizontal">
-        <ImageView
-            android:id="@+id/widget_btn_prev"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/widget_btn_bg"
-            android:contentDescription="Önceki"
-            android:padding="8dp"
-            android:src="@drawable/ic_widget_prev" />
-
-        <ImageView
-            android:id="@+id/widget_btn_seek_back"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/widget_btn_bg"
-            android:contentDescription="10 saniye geri"
-            android:padding="8dp"
-            android:src="@drawable/ic_widget_seek_back" />
-
-        <ImageView
-            android:id="@+id/widget_btn_play_pause"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/widget_btn_play_bg"
-            android:contentDescription="Oynat veya duraklat"
-            android:padding="10dp"
-            android:src="@drawable/ic_widget_play" />
-        <ImageView
-            android:id="@+id/widget_btn_seek_forward"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/widget_btn_bg"
-            android:contentDescription="10 saniye ileri"
-            android:padding="8dp"
-            android:src="@drawable/ic_widget_seek_forward" />
-
-        <ImageView
-            android:id="@+id/widget_btn_next"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/widget_btn_bg"
-            android:contentDescription="Sonraki"
-            android:padding="8dp"
-            android:src="@drawable/ic_widget_next" />
+    <ProgressBar android:id="@+id/widget_progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="3dp" android:layout_marginTop="8dp" android:progressDrawable="@drawable/widget_progress" android:max="1000" android:progress="0" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:gravity="center_vertical">
+        <TextView android:id="@+id/widget_elapsed" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0:00" android:textSize="10sp" android:textColor="#AEB0BF" android:fontFamily="sans-serif" />
+        <TextView android:id="@+id/widget_queue_count" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:gravity="center" android:text="VOXEN MUSIC" android:textSize="9sp" android:textColor="#76798B" android:letterSpacing="0.08" />
+        <TextView android:id="@+id/widget_duration" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0:00" android:textSize="10sp" android:textColor="#AEB0BF" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="4dp" android:gravity="center" android:orientation="horizontal">
+        <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"><ImageView android:id="@+id/widget_btn_prev" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:background="@drawable/widget_btn_bg" android:contentDescription="Önceki şarkı" android:padding="10dp" android:src="@drawable/ic_widget_prev" /></FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"><ImageView android:id="@+id/widget_btn_seek_back" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:background="@drawable/widget_btn_bg" android:contentDescription="10 saniye geri" android:padding="10dp" android:src="@drawable/ic_widget_seek_back" /></FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"><ImageView android:id="@+id/widget_btn_play_pause" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:background="@drawable/widget_btn_play_bg" android:contentDescription="Oynat" android:padding="12dp" android:src="@drawable/ic_widget_play" /></FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"><ImageView android:id="@+id/widget_btn_seek_forward" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:background="@drawable/widget_btn_bg" android:contentDescription="10 saniye ileri" android:padding="10dp" android:src="@drawable/ic_widget_seek_forward" /></FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"><ImageView android:id="@+id/widget_btn_next" android:layout_width="44dp" android:layout_height="44dp" android:layout_gravity="center" android:background="@drawable/widget_btn_bg" android:contentDescription="Sonraki şarkı" android:padding="10dp" android:src="@drawable/ic_widget_next" /></FrameLayout>
     </LinearLayout>
 </LinearLayout>

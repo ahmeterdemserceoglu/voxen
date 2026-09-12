@@ -43,6 +43,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initAuthListener: () => {
     return onAuthStateChanged(auth, async (user) => {
+      const changedAccount = accountSession.generation > 0 && accountSession.uid !== (user?.uid ?? null);
+      if (changedAccount) {
+        try { require('react-native').NativeModules?.VoxenDownloader?.cancelAll(); } catch {}
+      }
       const epoch = accountSession.switchTo(user?.uid ?? null);
       set({ user, isLoading: true });
       useMusicStore.setState(useMusicStore.getInitialState());

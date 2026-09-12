@@ -25,25 +25,37 @@ test('selected genres and followed artists drive discovery, with diverse song-on
   });
   const service = h.load('src/services/recommendations/recommendationService.ts').recommendationService;
   const results = await service.getDiscoveryFeed([], [], ['Chosen Artist'], ['Caz', 'Metal']);
-  assert.deepEqual(queries, ['Caz', 'Metal', 'Chosen Artist']);
+  assert.deepEqual(queries, ['Caz', 'Metal', 'Chosen Artist benzer şarkılar']);
   assert.ok(results.some(track => track.id === 'Caz'));
   assert.ok(results.some(track => track.id === 'Metal'));
   assert.equal(results.filter(track => track.id === 'duplicate').length, 1);
   assert.ok(!results.some(track => ['spoken', 'long'].includes(track.id)));
 });
 
-test('daily mixes invalidate by preference and account, without inserting unselected default genres', async () => {
+test('daily mixes distribute distinct tracks and invalidate by preferences, feedback and account', async () => {
   const queries = [];
-  const h = harness({ '../youtubeService': { YouTubeService: { search: async query => { queries.push(query); return [song(query)]; } } } });
+  const h = harness({ '../youtubeService': { YouTubeService: { search: async query => {
+    queries.push(query); return Array.from({ length: 30 }, (_, i) => song(`song-${i}`));
+  } } } });
   const service = h.load('src/services/recommendations/mixGenerator.ts').mixGenerator;
+  const feedback = h.load('src/services/recommendations/recommendationFeedback.ts').recommendationFeedback;
   await h.change('alice');
-  assert.deepEqual((await service.getDailyMixes(['Caz'])).map(m => m.genre), ['Caz']);
+  const mixes = await service.getDailyMixes(['Caz']);
+  assert.equal(mixes.length, 5);
+  assert.equal(new Set(mixes.flatMap(m => m.tracks.map(t => t.id))).size, 30);
+  assert.ok(queries[0].startsWith('Caz'));
   await service.getDailyMixes(['Caz']);
-  assert.deepEqual(queries, ['Caz']);
-  assert.deepEqual((await service.getDailyMixes(['Metal'])).map(m => m.genre), ['Metal']);
+  assert.equal(queries.length, 5);
+  await service.getDailyMixes(['Metal']);
+  assert.equal(queries.length, 10);
+  assert.ok(queries[5].startsWith('Metal'));
+  await feedback.block(song('song-0'));
+  const blocked = await service.getDailyMixes(['Metal']);
+  assert.equal(queries.length, 15);
+  assert.ok(blocked.every(m => m.tracks.every(t => t.id !== 'song-0')));
   await h.change('bob');
   await service.getDailyMixes(['Caz']);
-  assert.deepEqual(queries, ['Caz', 'Metal', 'Caz']);
+  assert.equal(queries.length, 20);
 });
 
 test('InnerTube follows returned automix endpoint and parses direct thumbnails without seed duplicates', async () => {

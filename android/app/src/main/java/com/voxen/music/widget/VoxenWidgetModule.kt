@@ -140,6 +140,13 @@ class VoxenWidgetModule(private val reactContext: ReactApplicationContext) : Rea
         @Volatile
         private var instance: VoxenWidgetModule? = null
 
+        fun dispatchActive(action: String): Boolean {
+            val active = instance ?: return false
+            if (!active.reactContext.hasActiveReactInstance()) return false
+            active.reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("onWidgetAction", action)
+            return true
+        }
+
         fun onAction(action: String, context: Context) {
             val activeModule = instance
             if (activeModule != null && activeModule.reactContext.hasActiveReactInstance()) {

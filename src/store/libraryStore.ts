@@ -1,3 +1,4 @@
+import type { ImportedPlaylistResult } from '../services/youtubeService';
 import { create } from 'zustand';
 import { useMusicStore } from './musicStore';
 import { accountStorage as AsyncStorage, accountSession } from '../services/auth/accountStorage';
@@ -8,6 +9,9 @@ import type { Track, HistoryEntry, SerializedArtist } from '../models';
 const TAG = 'LibraryStore';
 
 interface LibraryState {
+  savedAlbums: ImportedPlaylistResult[];
+  saveAlbum: (album: ImportedPlaylistResult) => void;
+  removeAlbum: (id: string) => void;
   likedTracks: Track[];
   likedIds: Set<string>;  // fast O(1) lookup
   history: HistoryEntry[];
@@ -45,6 +49,15 @@ const persist = async (key: string, data: unknown) => {
 };
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
+  savedAlbums: [],
+  saveAlbum: (album) => {
+    const savedAlbums = [album, ...get().savedAlbums.filter(item => item.id !== album.id)];
+    set({ savedAlbums }); void persist(STORAGE_KEYS.SAVED_ALBUMS, savedAlbums);
+  },
+  removeAlbum: (id) => {
+    const savedAlbums = get().savedAlbums.filter(item => item.id !== id);
+    set({ savedAlbums }); void persist(STORAGE_KEYS.SAVED_ALBUMS, savedAlbums);
+  },
   likedTracks: [],
   likedIds: new Set(),
   history: [],
@@ -56,15 +69,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const epoch = accountSession.generation;
     set({ isLoading: true });
     try {
-      const [likedJson, histJson, artistsJson, searchesJson] = await Promise.all([
+      const [likedJson, histJson, artistsJson, searchesJson, albumsJson] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.FAVORITES),
         AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
         AsyncStorage.getItem(STORAGE_KEYS.FOLLOWED_ARTISTS),
         AsyncStorage.getItem(STORAGE_KEYS.RECENT_SEARCHES),
+        AsyncStorage.getItem(STORAGE_KEYS.SAVED_ALBUMS),
       ]);
       if (!accountSession.isCurrent(epoch)) return;
       const likedTracks: Track[] = likedJson ? JSON.parse(likedJson) : [];
       set({
+        savedAlbums: albumsJson ? JSON.parse(albumsJson) : [],
         likedTracks,
         likedIds: new Set(likedTracks.map((t) => t.id)),
         history: histJson ? JSON.parse(histJson) : [],

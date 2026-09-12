@@ -1,6 +1,6 @@
 /**
  * Centralized AsyncStorage key constants.
- * Never use raw string keys directly — always use these.
+ * Never use raw string keys directly ï¿½ always use these.
  */
 export const STORAGE_KEYS = {
   // Music state
@@ -13,6 +13,8 @@ export const STORAGE_KEYS = {
   RECENTLY_PLAYED: '@voxen_recently_played',
 
   // Library
+  SAVED_ALBUMS: '@voxen_saved_albums',
+  RECOMMENDATION_FEEDBACK: '@voxen_recommendation_feedback',
   FOLLOWED_ARTISTS: '@voxen_followed_artists',
   FOLLOWING_USERS: '@voxen_following_users',
   RECENT_SEARCHES: '@voxen_recent_searches',

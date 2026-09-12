@@ -1,3 +1,4 @@
+import { albumFromRuns } from './youtubeTrackMetadata';
 import type { Track, ArtistSummary } from '../../models';
 import type {
   YTMListItemRenderer,
@@ -49,7 +50,7 @@ export function parseTrackFromRenderer(renderer: YTMListItemRenderer): Track | n
     if (/^\d+:\d+$/.test(run.text.trim())) {
       durationText = run.text.trim();
     } else if (run.navigationEndpoint?.browseEndpoint) {
-      artistNames.push(run.text);
+      if (!albumFromRuns([run])) artistNames.push(run.text);
     } else if (artistNames.length === 0 && run.text.trim()) {
       // fallback: first non-separator text is artist
       artistNames.push(run.text);
@@ -87,6 +88,7 @@ export function parseTrackFromRenderer(renderer: YTMListItemRenderer): Track | n
     artist: artistName,
     artists,
     artistName,
+    album: albumFromRuns(flexColumns.flatMap(column => column.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [])),
     duration,
     durationFormatted: durationText,
     thumbnail: baseThumb,
