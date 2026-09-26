@@ -9,13 +9,17 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useMusicStore } from '../store/musicStore';
+import { useUiStore } from '../store/uiStore';
+import { formatTime } from '../utils/formatters';
 import { Colors } from '../constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const MiniPlayer: React.FC = () => {
   const Colors = useThemeColors();
@@ -27,11 +31,15 @@ export const MiniPlayer: React.FC = () => {
     duration,
     togglePlayPause,
     skipNext,
+    skipPrevious,
     openFullPlayer,
     isLoadingStream,
     streamError,
     stopPlayback,
+    favorites,
+    toggleFavorite,
   } = useMusicStore();
+  const { openModal } = useUiStore();
 
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -92,6 +100,60 @@ export const MiniPlayer: React.FC = () => {
   if (!currentTrack) return null;
 
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (position / duration) * 100)) : 0;
+
+  if (IS_DESKTOP) {
+    const isFavorite = favorites.some(item => item.id === currentTrack.id);
+    return (
+      <View style={styles.desktopContainer}>
+        <View style={styles.desktopProgressTrack}>
+          <View style={[styles.desktopProgressFill, { width: `${progressPercent}%` }]} />
+        </View>
+        <View style={styles.desktopContentRow}>
+          <TouchableOpacity style={styles.desktopTrackArea} activeOpacity={0.82} onPress={openFullPlayer}>
+            <Image source={{ uri: currentTrack.thumbnail }} style={styles.desktopArtwork} contentFit="cover" transition={180} />
+            <View style={styles.desktopTrackInfo}>
+              <Text style={styles.desktopTitle} numberOfLines={1}>{currentTrack.title}</Text>
+              <Text style={styles.desktopArtist} numberOfLines={1}>{currentTrack.artist}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.desktopCenterControls}>
+            <View style={styles.desktopControlButtons}>
+              <TouchableOpacity style={styles.desktopSkipBtn} onPress={skipPrevious}>
+                <Ionicons name="play-skip-back" size={19} color={Colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.desktopPlayBtn} onPress={togglePlayPause}>
+                {streamError ? (
+                  <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+                ) : isLoadingStream ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color="#FFFFFF" style={{ marginLeft: isPlaying ? 0 : 2 }} />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.desktopSkipBtn} onPress={() => skipNext()}>
+                <Ionicons name="play-skip-forward" size={19} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.desktopTime}>{formatTime(position / 1000)}  /  {formatTime(duration / 1000)}</Text>
+          </View>
+
+          <View style={styles.desktopActions}>
+            <TouchableOpacity style={styles.desktopActionBtn} onPress={() => toggleFavorite(currentTrack)}>
+              <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={20} color={isFavorite ? Colors.primary : Colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.desktopActionBtn} onPress={() => openModal('queue')}>
+              <Ionicons name="list" size={21} color={Colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.desktopOpenBtn} onPress={openFullPlayer}>
+              <Ionicons name="expand-outline" size={19} color={Colors.text} />
+              <Text style={styles.desktopOpenText}>Oynatıcı</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Animated.View
@@ -169,6 +231,36 @@ export const MiniPlayer: React.FC = () => {
 };
 
 const createStyles = (Colors: Palette) => StyleSheet.create({
+  desktopContainer: {
+    marginHorizontal: 22,
+    marginBottom: 16,
+    backgroundColor: 'rgba(20,20,23,0.985)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 25,
+  },
+  desktopProgressTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
+  desktopProgressFill: { height: '100%', backgroundColor: Colors.primary },
+  desktopContentRow: { height: 76, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+  desktopTrackArea: { width: '34%', minWidth: 230, maxWidth: 410, flexDirection: 'row', alignItems: 'center' },
+  desktopArtwork: { width: 52, height: 52, borderRadius: 10, backgroundColor: Colors.card },
+  desktopTrackInfo: { flex: 1, minWidth: 0, marginLeft: 12, marginRight: 18 },
+  desktopTitle: { color: Colors.text, fontSize: 14, fontWeight: '700' },
+  desktopArtist: { color: Colors.textMuted, fontSize: 12, marginTop: 4 },
+  desktopCenterControls: { flex: 1, minWidth: 250, alignItems: 'center', justifyContent: 'center' },
+  desktopControlButtons: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  desktopSkipBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  desktopPlayBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  desktopTime: { color: Colors.textDisabled, fontSize: 9, marginTop: 3, fontVariant: ['tabular-nums'] },
+  desktopActions: { width: '34%', minWidth: 250, maxWidth: 410, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 5 },
+  desktopActionBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  desktopOpenBtn: { height: 36, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, marginLeft: 3, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  desktopOpenText: { color: Colors.text, fontSize: 11, fontWeight: '700' },
   container: {
     marginHorizontal: 14,
     marginBottom: 8,

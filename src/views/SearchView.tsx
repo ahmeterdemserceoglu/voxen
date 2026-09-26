@@ -24,6 +24,8 @@ import { TrackRow } from '../components/TrackRow';
 import { SkeletonCard } from '../components/SkeletonCard';
 import { Colors } from '../constants/theme';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+
 const BROWSE_CATEGORIES = [
   { label: 'Türkçe Rap', query: 'Türkçe Rap 2024', color: '#E02424', icon: 'mic-outline' },
   { label: 'Türkçe Pop', query: 'Türkçe Pop Hit', color: '#D97706', icon: 'musical-note' },
@@ -234,7 +236,7 @@ export const SearchView: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-    <View style={[styles.container, { paddingTop: (insets.top || 16) + 12 }]}>
+    <View style={[styles.container, { paddingTop: IS_DESKTOP ? 30 : (insets.top || 16) + 12 }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Arama</Text>
@@ -649,7 +651,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingHorizontal: 16,
+    paddingHorizontal: IS_DESKTOP ? 24 : 16,
   },
   header: {
     marginBottom: 16,
@@ -1073,4 +1075,3 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     bottom: 8,
   },
 });
-

@@ -1,6 +1,6 @@
 {
   "name": "voxen",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -18,11 +18,13 @@
     "expo-status-bar": "~57.0.1",
     "firebase": "^12.18.0",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2",
     "react-native-webview": "13.16.1",
     "react-native-youtube-iframe": "^2.4.1",
     "zustand": "^5.0.15"
@@ -35,7 +37,11 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "linux:build": "./linux-player/build-deb.sh",
+    "linux:serve": "EXPO_PUBLIC_VOXEN_DESKTOP=1 expo export --platform web --output-dir dist-linux && ./linux-player/voxen-player-dev",
+    "windows:export": "EXPO_PUBLIC_VOXEN_DESKTOP=1 expo export --platform web --output-dir dist-windows",
+    "windows:build": "npm run windows:export && npm --prefix windows-player run build:windows"
   },
   "private": true
 }

@@ -87,7 +87,7 @@ export const SettingsModal: React.FC = () => {
     updateSettings,
   } = useSettingsStore();
 
-  const { user, signOut, openAuthModal } = useAuthStore();
+  const { user, signOut, openAuthModal, deleteAccount } = useAuthStore();
   const { clearHistory } = useLibraryStore();
 
   const handleClearCache = () => {
@@ -107,6 +107,43 @@ export const SettingsModal: React.FC = () => {
           onPress: () => {
             clearHistory();
             Alert.alert('Başarılı', 'Dinleme geçmişi temizlendi.');
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Hesabı Sil',
+      'Profiliniz, beğenileriniz, çalma listeleriniz ve bulut verileriniz kalıcı olarak silinecek.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Devam Et',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Son Onay',
+              'Bu işlem geri alınamaz. Voxen hesabınızı kalıcı olarak silmek istiyor musunuz?',
+              [
+                { text: 'İptal', style: 'cancel' },
+                {
+                  text: 'Hesabı Kalıcı Olarak Sil',
+                  style: 'destructive',
+                  onPress: async () => {
+                    const deleted = await deleteAccount();
+                    if (deleted) {
+                      closeModal();
+                      Alert.alert('Hesap Silindi', 'Voxen hesabınız ve bulut verileriniz silindi.');
+                      return;
+                    }
+                    const message = useAuthStore.getState().errorMessage || 'Hesap silinemedi.';
+                    Alert.alert('İşlem Tamamlanamadı', message);
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -311,16 +348,22 @@ export const SettingsModal: React.FC = () => {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Hesap</Text>
               {user ? (
-                <TouchableOpacity
-                  style={styles.actionRow}
-                  onPress={() => {
-                    closeModal();
-                    signOut();
-                  }}
-                >
-                  <Ionicons name="log-out-outline" size={20} color={Colors.textMuted} />
-                  <Text style={styles.actionLabel}>Hesaptan Çıkış Yap</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={styles.actionRow}
+                    onPress={() => {
+                      closeModal();
+                      signOut();
+                    }}
+                  >
+                    <Ionicons name="log-out-outline" size={20} color={Colors.textMuted} />
+                    <Text style={styles.actionLabel}>Hesaptan Çıkış Yap</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionRow} onPress={handleDeleteAccount}>
+                    <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
+                    <Text style={[styles.actionLabel, { color: '#EF4444' }]}>Hesabı Sil</Text>
+                  </TouchableOpacity>
+                </>
               ) : (
                 <TouchableOpacity
                   style={styles.actionRow}
@@ -497,4 +540,3 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     color: Colors.primary,
   },
 });
-

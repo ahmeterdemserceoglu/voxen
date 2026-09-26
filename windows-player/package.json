@@ -1,0 +1,51 @@
+{
+  "name": "voxen-windows-player",
+  "version": "1.0.1",
+  "description": "Voxen Windows masaüstü müzik uygulaması",
+  "author": "Laze Studio",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:windows": "electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "bgutils-js": "^4.0.3",
+    "jsdom": "^26.1.0",
+    "youtubei.js": "^18.1.0"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "studio.laze.voxen",
+    "productName": "Voxen",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist-windows",
+        "to": "web"
+      }
+    ],
+    "win": {
+      "icon": "../assets/icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Voxen-${version}-Windows-x64.${ext}"
+    }
+  }
+}

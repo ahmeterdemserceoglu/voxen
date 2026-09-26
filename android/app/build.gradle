@@ -94,8 +94,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         testInstrumentationRunner "com.voxen.music.playback.PlaybackInstrumentation"
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 2
+        versionName "1.0.1"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -106,6 +106,26 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            def releaseStoreFile = findProperty('VOXEN_RELEASE_STORE_FILE')
+            def releaseStorePassword = findProperty('VOXEN_RELEASE_STORE_PASSWORD')
+            def releaseKeyAlias = findProperty('VOXEN_RELEASE_KEY_ALIAS')
+            def releaseKeyPassword = findProperty('VOXEN_RELEASE_KEY_PASSWORD')
+
+            if (!releaseStoreFile || !releaseStorePassword || !releaseKeyAlias || !releaseKeyPassword) {
+                throw new GradleException('Voxen release signing properties are missing.')
+            }
+
+            def resolvedStoreFile = file(releaseStoreFile)
+            if (!resolvedStoreFile.exists()) {
+                throw new GradleException("Voxen release keystore not found: ${resolvedStoreFile}")
+            }
+
+            storeFile resolvedStoreFile
+            storePassword releaseStorePassword
+            keyAlias releaseKeyAlias
+            keyPassword releaseKeyPassword
+        }
     }
     buildTypes {
         debug {
@@ -114,7 +134,7 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

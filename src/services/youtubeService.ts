@@ -78,9 +78,13 @@ export interface ArtistProfileDetails {
   similarArtists?: SimilarArtistItem[];
 }
 
-const YTM_BASE = 'https://music.youtube.com/youtubei/v1';
+const IS_LINUX_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+const DESKTOP_API_ORIGIN = IS_LINUX_DESKTOP ? (process.env.EXPO_PUBLIC_VOXEN_API_BASE || '') : '';
+const YTM_BASE = IS_LINUX_DESKTOP ? `${DESKTOP_API_ORIGIN}/api/youtubei/v1` : 'https://music.youtube.com/youtubei/v1';
 
-const DEFAULT_HEADERS = {
+const DEFAULT_HEADERS: Record<string, string> = IS_LINUX_DESKTOP ? {
+  'Content-Type': 'application/json',
+} : {
   'Content-Type': 'application/json',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
   'Referer': 'https://music.youtube.com/',
@@ -919,6 +923,18 @@ export class YouTubeService {
       } catch (nativeErr) {
         console.warn('Native VoxenStream resolver failed, falling back to CDN streams:', nativeErr);
       }
+    }
+
+    if (IS_LINUX_DESKTOP) {
+      const response = await fetch(`${DESKTOP_API_ORIGIN}/api/stream/resolve?id=${encodeURIComponent(videoId)}`);
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.uri) {
+        throw new Error(result?.error || 'Linux ses akışı çözülemedi');
+      }
+      return {
+        ...result,
+        uri: result.uri.startsWith('/') ? `${DESKTOP_API_ORIGIN}${result.uri}` : result.uri,
+      };
     }
 
     try {

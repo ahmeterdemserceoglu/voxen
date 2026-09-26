@@ -1,6 +1,6 @@
 import { useThemeColors, useThemeStyles, type Palette } from './src/utils/useTheme';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useUiStore } from './src/store/uiStore';
@@ -16,6 +16,7 @@ import { ProfileView } from './src/views/ProfileView';
 // Core Player & Navigation Components
 import { FloatingNav } from './src/components/FloatingNav';
 import { MiniPlayer } from './src/components/MiniPlayer';
+import { DesktopSidebar } from './src/components/DesktopSidebar';
 import { FullPlayerModal } from './src/components/FullPlayerModal';
 import { AudioEngine } from './src/components/AudioEngine';
 import { ListeningRoomEngine } from './src/components/ListeningRoomEngine';
@@ -42,6 +43,8 @@ import { networkStatus } from './src/services/network/networkStatus';
 import { widgetService } from './src/services/widget/widgetService';
 
 import { Colors } from './src/constants/theme';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export default function App() {
   const Colors = useThemeColors();
@@ -74,6 +77,17 @@ export default function App() {
     );
   }
 
+  const activeView = (
+    <>
+      {activeTab === 'home' && <HomeView />}
+      {activeTab === 'search' && <SearchView />}
+      {activeTab === 'library' && <LibraryView />}
+      {activeTab === 'profile' && <ProfileView />}
+    </>
+  );
+
+  const desktopContentWidth = activeTab === 'profile' ? styles.desktopProfileWidth : activeTab === 'search' ? styles.desktopSearchWidth : styles.desktopContentWidth;
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
@@ -84,19 +98,28 @@ export default function App() {
           <AudioEngine />
           <ListeningRoomEngine />
 
-          {/* Active Screen View */}
-          <View style={styles.screenContainer}>
-            {activeTab === 'home' && <HomeView />}
-            {activeTab === 'search' && <SearchView />}
-            {activeTab === 'library' && <LibraryView />}
-            {activeTab === 'profile' && <ProfileView />}
-          </View>
-
-          {/* Bottom Dock: MiniPlayer stacked cleanly above FloatingNav dock */}
-          <View style={styles.bottomDockContainer} pointerEvents="box-none">
-            <MiniPlayer />
-            <FloatingNav />
-          </View>
+          {IS_DESKTOP ? (
+            <View style={styles.desktopShell}>
+              <DesktopSidebar />
+              <View style={styles.desktopWorkspace}>
+                <View style={styles.desktopBackdropGlow} pointerEvents="none" />
+                <View style={styles.desktopScreenContainer}>
+                  <View style={[styles.desktopContentFrame, desktopContentWidth]}>{activeView}</View>
+                </View>
+                <View style={styles.desktopPlayerDock} pointerEvents="box-none">
+                  <MiniPlayer />
+                </View>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.screenContainer}>{activeView}</View>
+              <View style={styles.bottomDockContainer} pointerEvents="box-none">
+                <MiniPlayer />
+                <FloatingNav />
+              </View>
+            </>
+          )}
 
           {/* Full Player Modal */}
           <FullPlayerModal />
@@ -161,6 +184,44 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   },
   screenContainer: {
     flex: 1,
+  },
+  desktopShell: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  desktopWorkspace: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  desktopBackdropGlow: {
+    position: 'absolute',
+    top: -260,
+    right: -180,
+    width: 680,
+    height: 520,
+    borderRadius: 340,
+    backgroundColor: 'rgba(229,9,20,0.035)',
+  },
+  desktopScreenContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  desktopContentFrame: {
+    width: '100%',
+    flex: 1,
+  },
+  desktopContentWidth: { maxWidth: 1420 },
+  desktopSearchWidth: { maxWidth: 1180 },
+  desktopProfileWidth: { maxWidth: 960 },
+  desktopPlayerDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
   },
   bottomDockContainer: {
     position: 'absolute',

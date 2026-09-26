@@ -33,9 +33,10 @@ import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
 
 const { width: screenWidth } = Dimensions.get('window');
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const GRID_SPACING = 12;
 const HORIZONTAL_PADDING = 16;
-const CARD_WIDTH = Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - GRID_SPACING) / 2);
+const CARD_WIDTH = IS_DESKTOP ? 210 : Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - GRID_SPACING) / 2);
 
 type SubTabKey = 'all' | 'playlists' | 'favorites' | 'downloads' | 'artists' | 'albums' | 'history';
 type ViewMode = 'grid' | 'list';
@@ -397,7 +398,7 @@ export const LibraryView: React.FC = () => {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: (insets.top || 16) + 8 }]}>
+    <View style={[styles.container, { paddingTop: IS_DESKTOP ? 30 : (insets.top || 16) + 8 }]}>
       {/* Top Bar / Header */}
       <View style={styles.topHeader}>
         <View style={styles.titleRow}>
@@ -1598,4 +1599,3 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     fontWeight: '500',
   },
 });
-

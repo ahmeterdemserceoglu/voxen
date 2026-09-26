@@ -191,7 +191,7 @@ test('transient decoder interruption preserves play intent and resumes at the re
   await act(async()=>tree.unmount());
 });
 
-test('starting a song does not reload the home feed, but a real listening signal refreshes recommendations', async () => {
+test('starting or listening to a song does not reload the current home feed', async () => {
   let loads=0;
   const h=harness({...base,
     'react-native':{...native,ScrollView:host('ScrollView'),RefreshControl:host('RefreshControl'),ActivityIndicator:'ActivityIndicator'},
@@ -205,7 +205,7 @@ test('starting a song does not reload the home feed, but a real listening signal
   await act(async()=>{await h.music.getState().playTrack(track('no-reload'),[track('no-reload')]);});
   assert.equal(loads,1);
   await act(async()=>{await h.load('src/services/recommendations/tasteProfileService.ts').tasteProfileService.record('LISTEN_30S','Listened',undefined,'no-reload');});
-  assert.equal(loads,2);
+  assert.equal(loads,1);
   await act(async()=>tree.unmount());
 });
 

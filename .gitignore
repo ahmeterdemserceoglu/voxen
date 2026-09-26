@@ -21,6 +21,9 @@ out/
 .gradle/
 build/
 node_modules/
+.expo/
+dist-linux/
+dist-windows/
 # Local configuration file (sdk path, etc)
 local.properties
 
@@ -53,8 +56,12 @@ captures/
 
 # Keystore files
 # Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+*.jks
+*.keystore
+*.p8
+*.p12
+*.pem
+*.key
 app/persistent-debug.keystore
 # ^^^ think twice before removing this gitignore, it became so FUCKING
 # annoying to unstage this file every time i want to commit stuff
@@ -100,7 +107,8 @@ core
 core.*
 *.so
 *.bin
-.env
+.env*
+!.env.example
 app/src/main/java/com/metrolist/music/listentogether/proto/*
 
 # FFTW third-party library build artifacts
@@ -117,3 +125,16 @@ app/src/main/cpp/coverart/
 .cortexkit
 .mcp.json
 *.har
+
+# Local IDE and hosting state
+.vs/
+.vercel/
+
+# Desktop build outputs
+linux-player/release/
+linux-player/artifacts/
+windows-player/release/
+*.deb
+*.AppImage
+*.exe
+*.msi

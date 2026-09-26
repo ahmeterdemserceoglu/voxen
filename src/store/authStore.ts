@@ -7,6 +7,7 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
+  deleteUser,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useMusicStore } from './musicStore';
@@ -17,6 +18,7 @@ import { useSocialStore } from './socialStore';
 import { useUiStore } from './uiStore';
 import { accountSession } from '../services/auth/accountStorage';
 import { socialService } from '../services/social/socialService';
+import { firestoreService } from '../services/firebase/firestoreService';
 
 interface AuthState {
   user: User | null;
@@ -29,6 +31,7 @@ interface AuthState {
   signUp: (email: string, pass: string, name?: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
+  deleteAccount: () => Promise<boolean>;
   openAuthModal: () => void;
   closeAuthModal: () => void;
   clearError: () => void;
@@ -137,6 +140,31 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         errorMessage: 'Şifre sıfırlama e-postası gönderilemedi. E-postanızı kontrol edin.',
         isLoading: false,
+      });
+      return false;
+    }
+  },
+
+  deleteAccount: async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      set({ errorMessage: 'Silinecek aktif bir hesap bulunamadı.' });
+      return false;
+    }
+
+    set({ isLoading: true, errorMessage: null });
+    try {
+      await firestoreService.deleteUser(currentUser.uid);
+      await deleteUser(currentUser);
+      set({ user: null, isLoading: false, isAuthModalOpen: false });
+      return true;
+    } catch (err: any) {
+      const requiresRecentLogin = err?.code === 'auth/requires-recent-login';
+      set({
+        isLoading: false,
+        errorMessage: requiresRecentLogin
+          ? 'Güvenlik için çıkış yapıp yeniden giriş yaptıktan sonra tekrar deneyin.'
+          : 'Hesap silinemedi. Lütfen tekrar deneyin.',
       });
       return false;
     }

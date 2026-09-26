@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,8 @@ import { useLibraryStore } from '../store/libraryStore';
 import { useUiStore } from '../store/uiStore';
 import { useSocialStore } from '../store/socialStore';
 import { Colors } from '../constants/theme';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const ProfileView: React.FC = () => {
   const Colors = useThemeColors();
@@ -260,7 +263,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 56,
+    paddingTop: IS_DESKTOP ? 30 : 56,
     paddingBottom: 16,
   },
   headerTitle: {
@@ -281,8 +284,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 180,
+    paddingHorizontal: IS_DESKTOP ? 8 : 16,
+    paddingBottom: IS_DESKTOP ? 130 : 180,
   },
   userCard: {
     flexDirection: 'row',

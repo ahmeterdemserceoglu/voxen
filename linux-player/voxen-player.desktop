@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Voxen
+Comment=Modern müzik deneyimi
+Exec=/usr/bin/voxen-player
+Icon=voxen-player
+Terminal=false
+Type=Application
+Categories=Audio;Music;Player;
+StartupWMClass=VoxenPlayer

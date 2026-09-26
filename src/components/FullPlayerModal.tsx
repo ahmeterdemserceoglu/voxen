@@ -22,6 +22,7 @@ import { Colors } from '../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ARTWORK_SIZE = Math.min(SCREEN_WIDTH - 64, 340);
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 function formatTime(ms: number): string {
   if (!ms || isNaN(ms) || ms < 0) return '0:00';
@@ -100,6 +101,150 @@ export const FullPlayerModal: React.FC = () => {
     seekTo(scrubTarget.current);
     setIsScrubbing(false);
   };
+
+  if (IS_DESKTOP) {
+    return (
+      <Modal
+        visible={isFullPlayerOpen}
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        onRequestClose={closeFullPlayer}
+      >
+        <View style={styles.desktopModal}>
+          <LinearGradient
+            colors={['rgba(84, 7, 12, 0.72)', '#111114', '#080809']}
+            locations={[0, 0.52, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+
+          <View style={styles.desktopHeader}>
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={closeFullPlayer} activeOpacity={0.75}>
+              <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={styles.desktopHeaderBrand}>
+              <View style={styles.desktopBrandDot} />
+              <Text style={styles.desktopBrandText}>VOXEN</Text>
+            </View>
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleShare} activeOpacity={0.75}>
+              <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.desktopPlayerBody}>
+            <View style={styles.desktopArtworkColumn}>
+              <View style={styles.desktopArtworkShadow}>
+                <Image
+                  source={{ uri: currentTrack.thumbnail }}
+                  style={[styles.desktopArtwork, !!streamError && styles.artworkDimmed]}
+                  contentFit="cover"
+                  transition={260}
+                />
+                {streamError && (
+                  <View style={styles.errorOverlay}>
+                    <Ionicons name="alert-circle" size={34} color="#FF6B6B" />
+                    <Text style={styles.errorText}>{streamError}</Text>
+                    <TouchableOpacity style={styles.retryBtn} onPress={retryPlayback}>
+                      <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                      <Text style={styles.retryBtnText}>Yeniden Dene</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+              <View style={styles.desktopArtworkCaption}>
+                <Ionicons name="musical-notes" size={13} color={Colors.primary} />
+                <Text style={styles.desktopArtworkCaptionText}>{queue.length > 1 ? `${queue.length} parçalık kuyruk` : 'Şimdi oynatılıyor'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.desktopDetails}>
+              <Text style={styles.desktopEyebrow}>ŞİMDİ OYNATILIYOR</Text>
+              <Text style={styles.desktopTrackTitle} numberOfLines={2}>{currentTrack.title}</Text>
+              <Text style={styles.desktopTrackArtist} numberOfLines={1}>{currentTrack.artist}</Text>
+
+              <TouchableOpacity
+                accessibilityLabel="Şarkının albümünü aç"
+                disabled={albumNavigation.loading}
+                onPress={() => { void albumNavigation.open(); }}
+                style={styles.desktopAlbumLink}
+              >
+                {albumNavigation.loading ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="disc-outline" size={16} color={Colors.primary} />}
+                <Text numberOfLines={1} style={styles.desktopAlbumText}>{typeof currentTrack.album === 'object' ? currentTrack.album.title : currentTrack.album || 'Albümü görüntüle'}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.desktopQuickActions}>
+                <TouchableOpacity style={styles.desktopQuickAction} onPress={() => toggleFavorite(currentTrack)}>
+                  <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? Colors.primary : Colors.text} />
+                  <Text style={styles.desktopQuickActionText}>{isFav ? 'Beğenildi' : 'Beğen'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopQuickAction} onPress={() => openAddToPlaylist(currentTrack)}>
+                  <Ionicons name="add" size={21} color={Colors.text} />
+                  <Text style={styles.desktopQuickActionText}>Listeye ekle</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopIconAction} onPress={() => openActionSheet(currentTrack)}>
+                  <Ionicons name="ellipsis-horizontal" size={21} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.desktopSliderContainer}>
+                <View
+                  style={styles.sliderTouchArea}
+                  onLayout={(evt) => { sliderWidth.current = Math.max(1, evt.nativeEvent.layout.width); }}
+                  onResponderTerminationRequest={() => false}
+                  onResponderTerminate={() => setIsScrubbing(false)}
+                  onStartShouldSetResponder={() => true}
+                  onResponderGrant={(evt) => { setIsScrubbing(true); handleProgressTouch(evt); }}
+                  onResponderMove={handleProgressTouch}
+                  onResponderRelease={handleProgressRelease}
+                >
+                  <View style={styles.sliderTrack} pointerEvents="none">
+                    <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
+                    <View style={[styles.sliderThumb, { left: `${Math.max(0, Math.min(97, progressRatio * 100))}%` }]} />
+                  </View>
+                </View>
+                <View style={styles.timeRow}>
+                  <Text style={styles.timeText}>{formatTime(currentPos)}</Text>
+                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.desktopControlsRow}>
+                <TouchableOpacity style={styles.desktopSubControl} onPress={toggleShuffle}>
+                  <Ionicons name="shuffle" size={20} color={shuffle ? Colors.primary : Colors.textMuted} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopSkipControl} onPress={skipPrevious}>
+                  <Ionicons name="play-skip-back" size={25} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopPlayControl} onPress={togglePlayPause}>
+                  {isLoadingStream ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name={isPlaying ? 'pause' : 'play'} size={31} color="#FFFFFF" style={{ marginLeft: isPlaying ? 0 : 3 }} />}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopSkipControl} onPress={() => skipNext()}>
+                  <Ionicons name="play-skip-forward" size={25} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopSubControl} onPress={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')}>
+                  <Ionicons name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'} size={20} color={repeatMode !== 'off' ? Colors.primary : Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.desktopBottomActions}>
+                <TouchableOpacity style={styles.desktopBottomAction} onPress={() => openModal('lyrics')}>
+                  <Ionicons name="mic-outline" size={16} color={Colors.text} />
+                  <Text style={styles.desktopBottomActionText}>Şarkı sözleri</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopBottomAction} onPress={() => { closeFullPlayer(); openModal('related'); }}>
+                  <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.desktopBottomActionText}>Benzer parçalar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.desktopBottomAction} onPress={() => openModal('queue')}>
+                  <Ionicons name="list" size={17} color={Colors.text} />
+                  <Text style={styles.desktopBottomActionText}>Kuyruk</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -366,6 +511,58 @@ export const FullPlayerModal: React.FC = () => {
 };
 
 const createStyles = (Colors: Palette) => StyleSheet.create({
+  desktopModal: {
+    flex: 1,
+    backgroundColor: '#080809',
+    paddingHorizontal: 38,
+    paddingVertical: 26,
+  },
+  desktopHeader: {
+    width: '100%',
+    maxWidth: 1180,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 22,
+  },
+  desktopHeaderBtn: { width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' },
+  desktopHeaderBrand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  desktopBrandDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.primary },
+  desktopBrandText: { color: Colors.text, fontSize: 13, fontWeight: '900', letterSpacing: 2.2 },
+  desktopPlayerBody: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 70,
+    paddingBottom: 18,
+  },
+  desktopArtworkColumn: { width: 430, alignItems: 'center' },
+  desktopArtworkShadow: { width: 420, height: 420, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 22 }, shadowOpacity: 0.62, shadowRadius: 32 },
+  desktopArtwork: { width: '100%', height: '100%', borderRadius: 24, backgroundColor: Colors.card, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  desktopArtworkCaption: { marginTop: 17, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  desktopArtworkCaptionText: { color: Colors.textMuted, fontSize: 11, fontWeight: '600' },
+  desktopDetails: { flex: 1, minWidth: 0, maxWidth: 520 },
+  desktopEyebrow: { color: Colors.primary, fontSize: 10, fontWeight: '800', letterSpacing: 1.8, marginBottom: 10 },
+  desktopTrackTitle: { color: Colors.text, fontSize: 34, lineHeight: 40, fontWeight: '800', letterSpacing: -0.9 },
+  desktopTrackArtist: { color: Colors.textMuted, fontSize: 18, fontWeight: '500', marginTop: 7 },
+  desktopAlbumLink: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 13, alignSelf: 'flex-start' },
+  desktopAlbumText: { color: Colors.primary, fontSize: 12, fontWeight: '600', maxWidth: 360 },
+  desktopQuickActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24 },
+  desktopQuickAction: { height: 38, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  desktopQuickActionText: { color: Colors.text, fontSize: 11, fontWeight: '600' },
+  desktopIconAction: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  desktopSliderContainer: { marginTop: 25 },
+  desktopControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingHorizontal: 8 },
+  desktopSubControl: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  desktopSkipControl: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.065)' },
+  desktopPlayControl: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.45, shadowRadius: 16 },
+  desktopBottomActions: { flexDirection: 'row', gap: 8, marginTop: 25, flexWrap: 'wrap' },
+  desktopBottomAction: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  desktopBottomActionText: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: '#0B0B0B',
@@ -616,4 +813,3 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     fontWeight: '600',
   },
 });
-

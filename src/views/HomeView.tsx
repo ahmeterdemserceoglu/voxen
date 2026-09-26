@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +22,6 @@ import { useMusicStore } from '../store/musicStore';
 import { useAuthStore } from '../store/authStore';
 import { useUiStore } from '../store/uiStore';
 import { useSocialStore } from '../store/socialStore';
-import { tasteProfileService } from '../services/recommendations/tasteProfileService';
 import { mixGenerator, DailyMix } from '../services/recommendations/mixGenerator';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLibraryStore } from '../store/libraryStore';
@@ -29,7 +29,8 @@ import { recommendationService, spreadArtists } from '../services/recommendation
 import { Colors } from '../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const COLUMN_WIDTH = Math.min(SCREEN_WIDTH * 0.88, 340);
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+const COLUMN_WIDTH = IS_DESKTOP ? 330 : Math.min(SCREEN_WIDTH * 0.88, 340);
 
 export const HomeView: React.FC = () => {
   const Colors = useThemeColors();
@@ -66,8 +67,6 @@ export const HomeView: React.FC = () => {
     });
   };
 
-  const [listeningRevision, setListeningRevision] = useState(0);
-  useEffect(() => tasteProfileService.subscribe(() => setListeningRevision(value => value + 1)), []);
   const [feedbackRevision, setFeedbackRevision] = useState(0);
   const discoveryVariety = useSettingsStore(state => state.discoveryVariety);
   useEffect(() => recommendationFeedback.subscribe(() => setFeedbackRevision(value => value + 1)), []);
@@ -110,7 +109,7 @@ export const HomeView: React.FC = () => {
     setLoading(true);
     loadFeed();
     return () => { requestId.current += 1; };
-  }, [tasteKey, user?.uid, feedbackRevision, discoveryVariety, listeningRevision]);
+  }, [tasteKey, user?.uid, feedbackRevision, discoveryVariety]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -142,7 +141,8 @@ export const HomeView: React.FC = () => {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: (insets.top || 16) + 10, paddingBottom: 170 },
+          IS_DESKTOP && styles.desktopScrollContent,
+          { paddingTop: IS_DESKTOP ? 28 : (insets.top || 16) + 10, paddingBottom: IS_DESKTOP ? 136 : 170 },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -153,10 +153,10 @@ export const HomeView: React.FC = () => {
         <View style={styles.headerRow}>
           <View>
             <View style={styles.brandRow}>
-              <Text style={styles.brandText}>VOXEN</Text>
-              <View style={styles.brandDot} />
+              <Text style={styles.brandText}>{IS_DESKTOP ? 'Senin için' : 'VOXEN'}</Text>
+              {!IS_DESKTOP && <View style={styles.brandDot} />}
             </View>
-            <Text style={styles.subBrand}>Sınırsız & Reklamsız Müzik</Text>
+            <Text style={styles.subBrand}>{IS_DESKTOP ? 'Bugünün seçkileri ve kaldığın yer' : 'Sınırsız & Reklamsız Müzik'}</Text>
           </View>
 
           <View style={styles.headerRight}>
@@ -598,6 +598,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
   },
+  desktopScrollContent: {
+    paddingHorizontal: 12,
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -811,7 +814,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     padding: 6,
   },
   heroCard: {
-    height: 185,
+    height: IS_DESKTOP ? 250 : 185,
     borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
@@ -1019,7 +1022,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     fontWeight: '600',
   },
   recentCard: {
-    width: Math.min(SCREEN_WIDTH * 0.78, 310),
+    width: IS_DESKTOP ? 320 : Math.min(SCREEN_WIDTH * 0.78, 310),
     height: 64,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.045)',
@@ -1102,4 +1105,3 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     marginRight: 2,
   },
 });
-
