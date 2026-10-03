@@ -1,4 +1,5 @@
 import { AdvancedPlaybackSettings } from './AdvancedPlaybackSettings';
+import { appAlert } from '../utils/appAlert';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useRef, useState, useEffect } from 'react';
 import {
@@ -9,10 +10,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
   PanResponder,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore, Theme } from '../store/settingsStore';
@@ -22,20 +22,20 @@ import { useUiStore } from '../store/uiStore';
 import { youtubeCache } from '../services/youtube/youtubeCache';
 import { Colors } from '../constants/theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const SettingsModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const { activeModal, closeModal, openModal } = useUiStore();
   const isOpen = activeModal === 'settings';
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.75;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.75;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isOpen) {
@@ -43,6 +43,10 @@ export const SettingsModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -53,6 +57,7 @@ export const SettingsModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -61,11 +66,11 @@ export const SettingsModal: React.FC = () => {
       onPanResponderRelease: (_, gestureState) => {
         // Explicit swipe UP -> expand to full screen
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           // Explicit swipe DOWN
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }
@@ -92,11 +97,11 @@ export const SettingsModal: React.FC = () => {
 
   const handleClearCache = () => {
     youtubeCache.clearSearch();
-    Alert.alert('Başarılı', 'Uygulama arama ve metadata önbelleği temizlendi.');
+    appAlert('Başarılı', 'Uygulama arama ve metadata önbelleği temizlendi.');
   };
 
   const handleClearHistory = () => {
-    Alert.alert(
+    appAlert(
       'Geçmişi Temizle',
       'Tüm dinleme geçmişiniz silinecek. Onaylıyor musunuz?',
       [
@@ -106,7 +111,7 @@ export const SettingsModal: React.FC = () => {
           style: 'destructive',
           onPress: () => {
             clearHistory();
-            Alert.alert('Başarılı', 'Dinleme geçmişi temizlendi.');
+            appAlert('Başarılı', 'Dinleme geçmişi temizlendi.');
           },
         },
       ]
@@ -114,7 +119,7 @@ export const SettingsModal: React.FC = () => {
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
+    appAlert(
       'Hesabı Sil',
       'Profiliniz, beğenileriniz, çalma listeleriniz ve bulut verileriniz kalıcı olarak silinecek.',
       [
@@ -123,7 +128,7 @@ export const SettingsModal: React.FC = () => {
           text: 'Devam Et',
           style: 'destructive',
           onPress: () => {
-            Alert.alert(
+            appAlert(
               'Son Onay',
               'Bu işlem geri alınamaz. Voxen hesabınızı kalıcı olarak silmek istiyor musunuz?',
               [
@@ -135,11 +140,11 @@ export const SettingsModal: React.FC = () => {
                     const deleted = await deleteAccount();
                     if (deleted) {
                       closeModal();
-                      Alert.alert('Hesap Silindi', 'Voxen hesabınız ve bulut verileriniz silindi.');
+                      appAlert('Hesap Silindi', 'Voxen hesabınız ve bulut verileriniz silindi.');
                       return;
                     }
                     const message = useAuthStore.getState().errorMessage || 'Hesap silinemedi.';
-                    Alert.alert('İşlem Tamamlanamadı', message);
+                    appAlert('İşlem Tamamlanamadı', message);
                   },
                 },
               ]

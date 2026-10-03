@@ -1,12 +1,12 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   Modal,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   Platform,
   ActivityIndicator,
   Share,
@@ -20,8 +20,6 @@ import { useUiStore } from '../store/uiStore';
 import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
 import { Colors } from '../constants/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const ARTWORK_SIZE = Math.min(SCREEN_WIDTH - 64, 340);
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 function formatTime(ms: number): string {
@@ -35,8 +33,10 @@ function formatTime(ms: number): string {
 export const FullPlayerModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const artworkSize = Math.max(160, Math.min(windowWidth - 64, windowHeight * 0.42, 340));
   const insets = useSafeAreaInsets();
-  const { openModal } = useUiStore();
+  const { openModal, activeModal } = useUiStore();
   const {
     currentTrack,
     isPlaying,
@@ -69,6 +69,15 @@ export const FullPlayerModal: React.FC = () => {
   const scrubTarget = useRef(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubPosition, setScrubPosition] = useState(0);
+
+  useEffect(() => {
+    if (!IS_DESKTOP || !isFullPlayerOpen || activeModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeFullPlayer(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isFullPlayerOpen, activeModal, closeFullPlayer]);
 
   if (!currentTrack) return null;
 
@@ -103,14 +112,9 @@ export const FullPlayerModal: React.FC = () => {
   };
 
   if (IS_DESKTOP) {
+    if (!isFullPlayerOpen) return null;
     return (
-      <Modal
-        visible={isFullPlayerOpen}
-        animationType="fade"
-        presentationStyle="overFullScreen"
-        onRequestClose={closeFullPlayer}
-      >
-        <View style={styles.desktopModal}>
+        <View style={[styles.desktopModal, styles.desktopOverlay]}>
           <LinearGradient
             colors={['rgba(84, 7, 12, 0.72)', '#111114', '#080809']}
             locations={[0, 0.52, 1]}
@@ -118,14 +122,14 @@ export const FullPlayerModal: React.FC = () => {
           />
 
           <View style={styles.desktopHeader}>
-            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={closeFullPlayer} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={closeFullPlayer} activeOpacity={0.75} accessibilityLabel="Oynatıcıyı kapat">
               <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.desktopHeaderBrand}>
               <View style={styles.desktopBrandDot} />
               <Text style={styles.desktopBrandText}>VOXEN</Text>
             </View>
-            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleShare} activeOpacity={0.75}>
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleShare} activeOpacity={0.75} accessibilityLabel="Şarkıyı paylaş">
               <Ionicons name="share-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -195,6 +199,11 @@ export const FullPlayerModal: React.FC = () => {
                   onResponderGrant={(evt) => { setIsScrubbing(true); handleProgressTouch(evt); }}
                   onResponderMove={handleProgressTouch}
                   onResponderRelease={handleProgressRelease}
+                  accessibilityRole="adjustable"
+                  accessibilityLabel="Şarkı konumu"
+                  accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}
+                  accessibilityActions={[{ name: 'increment', label: 'İleri sar' }, { name: 'decrement', label: 'Geri sar' }]}
+                  onAccessibilityAction={(event) => seekTo(Math.max(0, Math.min(duration, position + (event.nativeEvent.actionName === 'increment' ? 5000 : -5000))))}
                 >
                   <View style={styles.sliderTrack} pointerEvents="none">
                     <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
@@ -208,19 +217,19 @@ export const FullPlayerModal: React.FC = () => {
               </View>
 
               <View style={styles.desktopControlsRow}>
-                <TouchableOpacity style={styles.desktopSubControl} onPress={toggleShuffle}>
+                <TouchableOpacity style={styles.desktopSubControl} onPress={toggleShuffle} accessibilityLabel={shuffle ? 'Karışık çalmayı kapat' : 'Karışık çalmayı aç'}>
                   <Ionicons name="shuffle" size={20} color={shuffle ? Colors.primary : Colors.textMuted} />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.desktopSkipControl} onPress={skipPrevious}>
+                <TouchableOpacity style={styles.desktopSkipControl} onPress={skipPrevious} accessibilityLabel="Önceki şarkı">
                   <Ionicons name="play-skip-back" size={25} color="#FFFFFF" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.desktopPlayControl} onPress={togglePlayPause}>
+                <TouchableOpacity style={styles.desktopPlayControl} onPress={togglePlayPause} accessibilityLabel={isPlaying ? 'Duraklat' : 'Oynat'}>
                   {isLoadingStream ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name={isPlaying ? 'pause' : 'play'} size={31} color="#FFFFFF" style={{ marginLeft: isPlaying ? 0 : 3 }} />}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.desktopSkipControl} onPress={() => skipNext()}>
+                <TouchableOpacity style={styles.desktopSkipControl} onPress={() => skipNext()} accessibilityLabel="Sonraki şarkı">
                   <Ionicons name="play-skip-forward" size={25} color="#FFFFFF" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.desktopSubControl} onPress={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')}>
+                <TouchableOpacity style={styles.desktopSubControl} onPress={() => setRepeatMode(repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off')} accessibilityLabel={`Tekrar modu: ${repeatMode === 'one' ? 'tek şarkı' : repeatMode === 'all' ? 'tüm sıra' : 'kapalı'}`}>
                   <Ionicons name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'} size={20} color={repeatMode !== 'off' ? Colors.primary : Colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -242,7 +251,6 @@ export const FullPlayerModal: React.FC = () => {
             </View>
           </View>
         </View>
-      </Modal>
     );
   }
 
@@ -268,6 +276,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.headerGlassBtn}
             onPress={closeFullPlayer}
+            accessibilityLabel="Oynatıcıyı kapat"
             activeOpacity={0.7}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
@@ -284,6 +293,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.headerGlassBtn}
             onPress={handleShare}
+            accessibilityLabel="Şarkıyı paylaş"
             activeOpacity={0.7}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
@@ -296,7 +306,7 @@ export const FullPlayerModal: React.FC = () => {
           <View style={styles.artworkShadow}>
             <Image
               source={{ uri: currentTrack.thumbnail }}
-              style={[styles.artwork, !!streamError && styles.artworkDimmed]}
+              style={[styles.artwork, { width: artworkSize, height: artworkSize }, !!streamError && styles.artworkDimmed]}
               contentFit="cover"
               transition={300}
             />
@@ -386,6 +396,11 @@ export const FullPlayerModal: React.FC = () => {
             }}
             onResponderMove={handleProgressTouch}
             onResponderRelease={handleProgressRelease}
+            accessibilityRole="adjustable"
+            accessibilityLabel="Şarkı konumu"
+            accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}
+            accessibilityActions={[{ name: 'increment', label: 'İleri sar' }, { name: 'decrement', label: 'Geri sar' }]}
+            onAccessibilityAction={(event) => seekTo(Math.max(0, Math.min(duration, position + (event.nativeEvent.actionName === 'increment' ? 5000 : -5000))))}
           >
             <View style={styles.sliderTrack} pointerEvents="none">
               <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
@@ -411,6 +426,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.controlSubBtn}
             onPress={toggleShuffle}
+            accessibilityLabel={shuffle ? 'Karışık çalmayı kapat' : 'Karışık çalmayı aç'}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -424,6 +440,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.controlSkipBtn}
             onPress={skipPrevious}
+            accessibilityLabel="Önceki şarkı"
             activeOpacity={0.7}
           >
             <Ionicons name="play-skip-back" size={28} color="#FFFFFF" />
@@ -433,6 +450,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.playPauseBtn}
             onPress={togglePlayPause}
+            accessibilityLabel={isPlaying ? 'Duraklat' : 'Oynat'}
             activeOpacity={0.85}
           >
             {isLoadingStream ? (
@@ -451,6 +469,7 @@ export const FullPlayerModal: React.FC = () => {
           <TouchableOpacity
             style={styles.controlSkipBtn}
             onPress={() => skipNext()}
+            accessibilityLabel="Sonraki şarkı"
             activeOpacity={0.7}
           >
             <Ionicons name="play-skip-forward" size={28} color="#FFFFFF" />
@@ -464,6 +483,7 @@ export const FullPlayerModal: React.FC = () => {
               else if (repeatMode === 'all') setRepeatMode('one');
               else setRepeatMode('off');
             }}
+            accessibilityLabel={`Tekrar modu: ${repeatMode === 'one' ? 'tek şarkı' : repeatMode === 'all' ? 'tüm sıra' : 'kapalı'}`}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -511,6 +531,14 @@ export const FullPlayerModal: React.FC = () => {
 };
 
 const createStyles = (Colors: Palette) => StyleSheet.create({
+  desktopOverlay: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 1000,
+  },
   desktopModal: {
     flex: 1,
     backgroundColor: '#080809',
@@ -606,8 +634,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     marginVertical: 18,
   },
   artworkShadow: {
-    width: ARTWORK_SIZE,
-    height: ARTWORK_SIZE,
+    width: 340,
+    height: 340,
     borderRadius: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 16 },

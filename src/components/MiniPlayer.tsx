@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
-  Dimensions,
+  useWindowDimensions,
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -18,12 +18,12 @@ import { useUiStore } from '../store/uiStore';
 import { formatTime } from '../utils/formatters';
 import { Colors } from '../constants/theme';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const MiniPlayer: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { width: windowWidth } = useWindowDimensions();
   const {
     currentTrack,
     isPlaying,
@@ -32,6 +32,7 @@ export const MiniPlayer: React.FC = () => {
     togglePlayPause,
     skipNext,
     skipPrevious,
+    seekTo,
     openFullPlayer,
     isLoadingStream,
     streamError,
@@ -43,6 +44,9 @@ export const MiniPlayer: React.FC = () => {
 
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
+  const desktopProgressWidth = useRef(1);
+  const windowWidthRef = useRef(windowWidth);
+  windowWidthRef.current = windowWidth;
 
   useEffect(() => {
     translateX.setValue(0);
@@ -59,7 +63,7 @@ export const MiniPlayer: React.FC = () => {
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dx < 0) {
           translateX.setValue(gestureState.dx);
-          const newOpacity = Math.max(0, 1 - Math.abs(gestureState.dx) / (SCREEN_WIDTH * 0.7));
+          const newOpacity = Math.max(0, 1 - Math.abs(gestureState.dx) / (windowWidthRef.current * 0.7));
           opacity.setValue(newOpacity);
         }
       },
@@ -67,7 +71,7 @@ export const MiniPlayer: React.FC = () => {
         if (gestureState.dx < -80 || gestureState.vx < -0.6) {
           Animated.parallel([
             Animated.timing(translateX, {
-              toValue: -SCREEN_WIDTH,
+              toValue: -windowWidthRef.current,
               duration: 200,
               useNativeDriver: true,
             }),
@@ -105,8 +109,23 @@ export const MiniPlayer: React.FC = () => {
     const isFavorite = favorites.some(item => item.id === currentTrack.id);
     return (
       <View style={styles.desktopContainer}>
-        <View style={styles.desktopProgressTrack}>
-          <View style={[styles.desktopProgressFill, { width: `${progressPercent}%` }]} />
+        <View
+          style={styles.desktopProgressTouch}
+          onLayout={(event) => { desktopProgressWidth.current = Math.max(1, event.nativeEvent.layout.width); }}
+          onStartShouldSetResponder={() => duration > 0}
+          onResponderRelease={(event) => {
+            const ratio = Math.max(0, Math.min(1, event.nativeEvent.locationX / desktopProgressWidth.current));
+            seekTo(ratio * duration);
+          }}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Şarkı konumu"
+          accessibilityValue={{ min: 0, max: 100, now: Math.round(progressPercent) }}
+          accessibilityActions={[{ name: 'increment', label: 'İleri sar' }, { name: 'decrement', label: 'Geri sar' }]}
+          onAccessibilityAction={(event) => seekTo(Math.max(0, Math.min(duration, position + (event.nativeEvent.actionName === 'increment' ? 5000 : -5000))))}
+        >
+          <View style={styles.desktopProgressTrack} pointerEvents="none">
+            <View style={[styles.desktopProgressFill, { width: `${progressPercent}%` }]} />
+          </View>
         </View>
         <View style={styles.desktopContentRow}>
           <TouchableOpacity style={styles.desktopTrackArea} activeOpacity={0.82} onPress={openFullPlayer}>
@@ -244,6 +263,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 25,
   },
+  desktopProgressTouch: { height: 12, justifyContent: 'center', cursor: 'pointer' },
   desktopProgressTrack: { height: 3, backgroundColor: 'rgba(255,255,255,0.08)' },
   desktopProgressFill: { height: '100%', backgroundColor: Colors.primary },
   desktopContentRow: { height: 76, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },

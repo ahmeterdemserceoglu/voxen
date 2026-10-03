@@ -1,11 +1,12 @@
 const path = require('path');
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 
 let mainWindow;
 let localServer;
 
 async function createWindow() {
-  process.env.VOXEN_PLAYER_PORT = '0';
+  // Browser storage (including Firebase Auth) belongs to an origin. Keep it stable.
+  process.env.VOXEN_PLAYER_PORT = process.env.VOXEN_PLAYER_PORT || '48731';
   process.env.VOXEN_WEB_ROOT = app.isPackaged
     ? path.join(process.resourcesPath, 'web')
     : path.join(__dirname, '..', 'dist-windows');
@@ -22,10 +23,12 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     show: false,
+    frame: false,
     backgroundColor: '#09090b',
     autoHideMenuBar: true,
     fullscreenable: true,
     webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -37,7 +40,7 @@ async function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(localOrigin)) {
+    if (new URL(url).origin !== localOrigin) {
       event.preventDefault();
       if (/^https?:/i.test(url)) shell.openExternal(url);
     }
@@ -46,11 +49,26 @@ async function createWindow() {
   await mainWindow.loadURL(localOrigin);
   mainWindow.maximize();
   mainWindow.show();
+  void backend.warmAudioResolver();
 }
 
-app.whenReady().then(createWindow).catch((error) => {
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
+else app.whenReady().then(createWindow).catch((error) => {
   console.error(error);
   app.quit();
+});
+
+app.on('second-instance', () => {
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.focus();
+});
+
+ipcMain.on('voxen:window-action', (event, action) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  if (action === 'minimize') mainWindow.minimize();
+  else if (action === 'maximize') mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+  else if (action === 'close') mainWindow.close();
 });
 
 app.on('window-all-closed', () => app.quit());

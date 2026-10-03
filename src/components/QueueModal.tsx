@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, Modal, PanResponder, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, FlatList, Modal, PanResponder, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,7 +34,7 @@ function QueueRow({ track, index, first, last, onPlay, onMove, onNext, onRemove,
     },
     onPanResponderTerminate: () => { translation.setValue(0); setDragging(false); onDrag(false); },
   }), [index, first, last, onMove, onDrag, onGesture, translation]);
-  const actions = () => Alert.alert(track.title, 'Çalma sırasını düzenle', [
+  const actions = () => appAlert(track.title, 'Çalma sırasını düzenle', [
     { text: 'Sıradaki yap', onPress: onNext },
     ...(index > first ? [{ text: 'Yukarı taşı', onPress: () => onMove(index, index - 1) }] : []),
     ...(index < last ? [{ text: 'Aşağı taşı', onPress: () => onMove(index, index + 1) }] : []),
@@ -114,7 +115,7 @@ export const QueueModal: React.FC = () => {
   const past = currentTrack ? queue.slice(0, queueIndex) : [];
   const remainingSeconds = upcoming.reduce((sum, track) => sum + (track.duration || 0), 0);
   const repeatLabel = repeatMode === 'one' ? 'Tek şarkı' : repeatMode === 'all' ? 'Sırayı tekrarla' : 'Tekrar kapalı';
-  const clear = () => Alert.alert('Sıradakileri temizle', 'Çalan şarkı ve kaldığın süre korunacak.', [
+  const clear = () => appAlert('Sıradakileri temizle', 'Çalan şarkı ve kaldığın süre korunacak.', [
     { text: 'Vazgeç', style: 'cancel' }, { text: 'Temizle', style: 'destructive', onPress: clearQueue },
   ]);
   const header = <View>

@@ -37,7 +37,7 @@ test('native background download results reconcile after restart and retain acco
  const native={results:async()=>JSON.stringify(jobs),acknowledge:key=>{delete jobs[key];},cancelAll(){},download:async(json,uri)=>{
    active++;max=Math.max(max,active);await new Promise(r=>setImmediate(r));const job={...JSON.parse(json),uri,state:'done',sizeBytes:3};jobs[job.key]=job;files.set(uri,3);active--;return JSON.stringify(job);
  }};
- const h=harness({'expo-file-system':{Paths:{},Directory,File},'react-native':{NativeModules:{VoxenDownloader:native}}}); await h.change('alice');
+ const h=harness({'expo-file-system':{Paths:{},Directory,File},'react-native':{NativeModules:{VoxenDownloader:native},Platform:{OS:'android'}}}); await h.change('alice');
  const service=h.load('src/services/offlineDownloadService.ts').offlineDownloadService;
  const result=await service.downloadMany([song('one'),song('two'),song('one'),song('three')]);assert.equal(result.completed,3);assert.equal(result.failed,0);assert.ok(max<=2);
  assert.equal((await service.getDownloadedTracks()).length,3);

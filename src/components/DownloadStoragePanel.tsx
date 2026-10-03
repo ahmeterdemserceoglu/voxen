@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 import { offlineDownloadService } from '../services/offlineDownloadService';
 import { useThemeColors } from '../utils/useTheme';
 import type { Track } from '../models';
@@ -23,9 +24,9 @@ export function DownloadStoragePanel({ onTracksChanged }: { onTracksChanged: (tr
   return <View style={{ paddingHorizontal: 18, paddingBottom: 10 }}>
     <Text style={{ color: colors.textMuted }}>{(bytes / 1048576).toFixed(1)} MB kullanılıyor</Text>
     <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-      {pending.length > 0 && button(`${pending.length} yarım indirmeyi sürdür`, () => { void offlineDownloadService.downloadMany(pending); })}
+      {pending.length > 0 && button(`${pending.length} indirmeyi yeniden dene`, () => { void offlineDownloadService.downloadMany(pending); })}
       {button('İndirmeleri durdur', () => offlineDownloadService.cancelAllDownloads())}
-      {bytes > 0 && button('Depolamayı temizle', () => Alert.alert('İndirilenleri temizle', 'İndirilen şarkılar ve yarım dosyalar silinecek.', [{ text: 'Vazgeç' }, { text: 'Temizle', style: 'destructive', onPress: () => { void offlineDownloadService.clearDownloads(); } }]))}
+      {(bytes > 0 || pending.length > 0) && button('Depolamayı temizle', () => appAlert('İndirilenleri temizle', 'İndirilen şarkılar ve yarım dosyalar silinecek.', [{ text: 'Vazgeç' }, { text: 'Temizle', style: 'destructive', onPress: () => { void offlineDownloadService.clearDownloads().catch(() => appAlert('Temizlenemedi', 'Bazı dosyalar silinemedi. Tekrar dene.')); } }]))}
     </View>
   </View>;
 }

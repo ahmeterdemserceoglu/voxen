@@ -1,4 +1,6 @@
 import { recommendationFeedback } from '../services/recommendations/recommendationFeedback';
+import { accountSession } from '../services/auth/accountStorage';
+import { appAlert } from '../utils/appAlert';
 import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useState, useRef, useEffect } from 'react';
@@ -10,7 +12,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Share,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   PanResponder,
   ScrollView,
@@ -24,12 +26,11 @@ import { useUiStore } from '../store/uiStore';
 import { YouTubeService } from '../services/youtubeService';
 import { offlineDownloadService } from '../services/offlineDownloadService';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const SongActionSheet: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { openArtist, openAlbum } = useUiStore();
   const {
     activeActionSong,
@@ -48,9 +49,10 @@ export const SongActionSheet: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.68;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.68;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isActionSheetOpen) {
@@ -58,6 +60,10 @@ export const SongActionSheet: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isActionSheetOpen]);
+
+  useEffect(() => {
+    if (isActionSheetOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -68,6 +74,7 @@ export const SongActionSheet: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -75,10 +82,10 @@ export const SongActionSheet: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeActionSheet();
           }
@@ -90,11 +97,16 @@ export const SongActionSheet: React.FC = () => {
   const [isDownloaded, setIsDownloaded] = useState(false);
 
   useEffect(() => {
+    let current = true;
     if (activeActionSong) {
-      offlineDownloadService.isDownloaded(activeActionSong.id).then(setIsDownloaded);
+      setIsDownloaded(false);
+      offlineDownloadService.isDownloaded(activeActionSong.id).then((downloaded) => {
+        if (current) setIsDownloaded(downloaded);
+      }).catch(() => {});
     } else {
       setIsDownloaded(false);
     }
+    return () => { current = false; };
   }, [activeActionSong]);
 
   const handleToggleDownload = async () => {
@@ -105,7 +117,11 @@ export const SongActionSheet: React.FC = () => {
     } else {
       // Start download in background — progress tracked via DownloadProgressRow
       offlineDownloadService.downloadTrack(activeActionSong).then((result) => {
-        if (result) setIsDownloaded(true);
+        if (result && useMusicStore.getState().activeActionSong?.id === activeActionSong.id) setIsDownloaded(true);
+      }).catch(() => {
+        if (useMusicStore.getState().activeActionSong?.id === activeActionSong.id) {
+          appAlert('İndirme başarısız', 'Şarkı indirilemedi. Daha sonra tekrar deneyin.');
+        }
       });
     }
   };
@@ -141,12 +157,25 @@ export const SongActionSheet: React.FC = () => {
   };
 
   const handleStartRadio = async () => {
+    const epoch = accountSession.generation;
+    const initialPlayback = useMusicStore.getState();
+    const playbackRevision = initialPlayback.playbackRevision;
+    const playingTrackId = initialPlayback.currentTrack?.id;
     closeActionSheet();
     const artist = activeActionSong.artist || activeActionSong.artistName;
-    const tracks = await YouTubeService.search(`${activeActionSong.title} ${artist} radyo mix`);
-    if (tracks.length > 0) {
-      setSourceContext({ type: 'radio', id: activeActionSong.id });
-      playTrack(activeActionSong, [activeActionSong, ...tracks.filter((t) => t.id !== activeActionSong.id)]);
+    try {
+      const tracks = await YouTubeService.search(`${activeActionSong.title} ${artist} radyo mix`);
+      if (!accountSession.isCurrent(epoch) || useMusicStore.getState().playbackRevision !== playbackRevision || useMusicStore.getState().currentTrack?.id !== playingTrackId) return;
+      if (tracks.length > 0) {
+        setSourceContext({ type: 'radio', id: activeActionSong.id });
+        void playTrack(activeActionSong, [activeActionSong, ...tracks.filter((t) => t.id !== activeActionSong.id)]);
+      } else {
+        appAlert('Radyo bulunamadı', 'Bu şarkı için benzer parçalar bulunamadı.');
+      }
+    } catch {
+      if (accountSession.isCurrent(epoch) && useMusicStore.getState().playbackRevision === playbackRevision && useMusicStore.getState().currentTrack?.id === playingTrackId) {
+        appAlert('Radyo açılamadı', 'Bağlantınızı kontrol edip yeniden deneyin.');
+      }
     }
   };
 

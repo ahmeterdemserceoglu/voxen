@@ -12,6 +12,8 @@ interface CachedStream {
 class AudioCacheService {
   private cache = new Map<string, CachedStream>();
   private prefetchQueue = new Set<string>();
+  private requests = new Map<string, Promise<ResolvedStreamResult>>();
+  private revision = 0;
 
   get(videoId: string): ResolvedStreamResult | null {
     const item = this.cache.get(videoId);
@@ -32,17 +34,28 @@ class AudioCacheService {
     this.cache.set(videoId, { stream, fetchedAt: Date.now() });
   }
 
+  resolve(videoId: string): Promise<ResolvedStreamResult> {
+    const cached = this.get(videoId);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.requests.get(videoId);
+    if (pending) return pending;
+    const revision = this.revision;
+    const request = YouTubeService.getAudioStreamUrl(videoId).then(stream => {
+      if (revision === this.revision) this.set(videoId, stream);
+      return stream;
+    }).finally(() => { if (this.requests.get(videoId) === request) this.requests.delete(videoId); });
+    this.requests.set(videoId, request);
+    return request;
+  }
+
   async prefetchNext(videoId: string): Promise<void> {
-    if (!videoId || this.cache.has(videoId) || this.prefetchQueue.has(videoId)) return;
+    if (!videoId || this.get(videoId) || this.prefetchQueue.has(videoId)) return;
     if (this.prefetchQueue.size >= MAX_PREFETCH_ITEMS) return;
 
     this.prefetchQueue.add(videoId);
     try {
       logger.info(TAG, `Prefetching audio stream for queue next: ${videoId}`);
-      const stream = await YouTubeService.getAudioStreamUrl(videoId);
-      if (stream) {
-        this.set(videoId, stream);
-      }
+      await this.resolve(videoId);
     } catch (err) {
       logger.warn(TAG, `Prefetch failed for ${videoId}`, err);
     } finally {
@@ -51,12 +64,16 @@ class AudioCacheService {
   }
 
   delete(videoId: string): void {
+    this.revision++;
     this.cache.delete(videoId);
+    this.requests.delete(videoId);
     this.prefetchQueue.delete(videoId);
   }
 
   clear(): void {
+    this.revision++;
     this.cache.clear();
+    this.requests.clear();
     this.prefetchQueue.clear();
   }
 }

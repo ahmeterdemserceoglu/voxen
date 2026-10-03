@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 import { YouTubeService } from '../services/youtubeService';
 import { useUiStore } from '../store/uiStore';
 import { accountSession } from '../services/auth/accountStorage';
@@ -18,9 +18,9 @@ export function useAlbumNavigation(track: Track | null | undefined, beforeOpen: 
     try {
       const album = await YouTubeService.getTrackAlbum(track);
       if (!valid()) return;
-      if (!album?.id) { Alert.alert('Albüm bulunamadı', 'Bu parça için bir albüm bağlantısı bulunamadı.'); return; }
+      if (!album?.id) { appAlert('Albüm bulunamadı', 'Bu parça için bir albüm bağlantısı bulunamadı.'); return; }
       before.current(); useUiStore.getState().openAlbum(album.title, album.id);
-    } catch { if (valid()) Alert.alert('Albüm yüklenemedi', 'Bağlantını kontrol edip tekrar deneyebilirsin.'); }
+    } catch { if (valid()) appAlert('Albüm yüklenemedi', 'Bağlantını kontrol edip tekrar deneyebilirsin.'); }
     finally { if (valid()) setLoading(false); }
   };
   return { open, loading };

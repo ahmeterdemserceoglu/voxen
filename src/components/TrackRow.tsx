@@ -13,6 +13,7 @@ interface TrackRowProps {
   isPlaying?: boolean;
   onPress: () => void;
   onMorePress?: () => void;
+  onArtworkError?: () => void;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = ({
@@ -22,6 +23,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   isPlaying,
   onPress,
   onMorePress,
+  onArtworkError,
 }) => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
@@ -40,7 +42,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
         </Text>
       )}
 
-      <Image source={{ uri: thumbUrl }} style={styles.thumbnail} contentFit="cover" />
+      <Image source={{ uri: thumbUrl }} style={styles.thumbnail} contentFit="cover" onError={onArtworkError} />
 
       <View style={styles.info}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>

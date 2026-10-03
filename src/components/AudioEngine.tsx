@@ -38,7 +38,7 @@ const TrackPlayer: React.FC<{ track: Track; revision: number }> = ({ track, revi
     const fail = () => {
       if (!current()) return;
       clearWatchdog();
-      audioCacheService.delete(track.id);
+      audioCacheService.delete(track.videoId || track.id);
       player.pause();
       useMusicStore.setState({ isPlaying: false, isLoadingStream: false, isBuffering: false,
         streamError: 'Şarkı yüklenemedi. Lütfen tekrar deneyin.' });
@@ -140,10 +140,8 @@ const TrackPlayer: React.FC<{ track: Track; revision: number }> = ({ track, revi
     (async () => {
       const localUri = await offlineDownloadService.getLocalUri(track.id);
       if (!current()) return;
-      const stream = localUri ? { uri: localUri } : audioCacheService.get(track.id)
-        ?? await YouTubeService.getAudioStreamUrl(track.videoId || track.id);
+      const stream = localUri ? { uri: localUri } : await audioCacheService.resolve(track.videoId || track.id);
       if (!current()) return;
-      if (!localUri) audioCacheService.set(track.id, stream);
       loudnessDb = 'loudnessDb' in stream ? stream.loudnessDb : undefined;
       player.replace({ uri: stream.uri, headers: 'headers' in stream ? stream.headers : undefined });
       resolved = true;

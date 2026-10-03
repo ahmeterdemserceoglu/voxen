@@ -21,6 +21,7 @@ import { useMusicStore } from '../store/musicStore';
 import { useLibraryStore } from '../store/libraryStore';
 import { useUiStore } from '../store/uiStore';
 import { TrackRow } from '../components/TrackRow';
+import { trackArtwork } from '../utils/artwork';
 import { SkeletonCard } from '../components/SkeletonCard';
 import { Colors } from '../constants/theme';
 
@@ -65,12 +66,18 @@ export const SearchView: React.FC = () => {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [results, setResults] = useState<TrackItem[]>([]);
-  const [artistResults, setArtistResults] = useState<ArtistResultItem[]>([]);
-  const [albumResults, setAlbumResults] = useState<AlbumItem[]>([]);
+  const [rawResults, setResults] = useState<TrackItem[]>([]);
+  const [rawArtists, setArtistResults] = useState<ArtistResultItem[]>([]);
+  const [rawAlbums, setAlbumResults] = useState<AlbumItem[]>([]);
+  const [failedArtwork, setFailedArtwork] = useState<Set<string>>(() => new Set());
+  const hideArtwork = (id: string) => setFailedArtwork(previous => new Set(previous).add(id));
+  const results = rawResults.filter(track => !!trackArtwork(track) && !failedArtwork.has(track.id));
+  const artistResults = rawArtists.filter(item => !!item.thumbnailUrl && !failedArtwork.has(item.id));
+  const albumResults = rawAlbums.filter(item => !!item.thumbnailUrl && !failedArtwork.has(item.id));
   const [albumSearchError, setAlbumSearchError] = useState(false);
   const searchedQuery = useRef('');
-  const [matchedArtist, setMatchedArtist] = useState<ArtistResultItem | null>(null);
+  const [rawMatchedArtist, setMatchedArtist] = useState<ArtistResultItem | null>(null);
+  const matchedArtist = rawMatchedArtist?.thumbnailUrl && !failedArtwork.has(rawMatchedArtist.id) ? rawMatchedArtist : null;
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchTab>('all');
   const debounceTimer = useRef<any>(null);
@@ -86,7 +93,7 @@ export const SearchView: React.FC = () => {
     YouTubeService.getTopCharts()
       .then((charts) => {
         if (isMounted) {
-          setTopCharts(charts);
+          setTopCharts(charts.map(section => ({ ...section, items: section.items.filter(track => !!trackArtwork(track)) }))) ;
           setLoadingCharts(false);
         }
       })
@@ -255,6 +262,7 @@ export const SearchView: React.FC = () => {
           onSubmitEditing={() => handleSearch(query)}
           returnKeyType="search"
           autoCorrect={false}
+          autoFocus={IS_DESKTOP}
         />
         {query.length > 0 && (
           <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -323,7 +331,7 @@ export const SearchView: React.FC = () => {
                 activeOpacity={0.8}
                 onPress={() => openArtist(item.name)}
               >
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.artistRowAvatar} contentFit="cover" />
+                <Image source={{ uri: item.thumbnailUrl }} style={styles.artistRowAvatar} contentFit="cover" onError={() => hideArtwork(item.id)} />
                 <View style={styles.artistRowInfo}>
                   <Text style={styles.artistRowName} numberOfLines={1}>
                     {item.name}
@@ -356,7 +364,7 @@ export const SearchView: React.FC = () => {
                 activeOpacity={0.8}
                 onPress={() => openAlbum(item.title, item.id)}
               >
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.albumRowThumb} contentFit="cover" />
+                <Image source={{ uri: item.thumbnailUrl }} style={styles.albumRowThumb} contentFit="cover" onError={() => hideArtwork(item.id)} />
                 <View style={styles.albumRowInfo}>
                   <Text style={styles.albumRowTitle} numberOfLines={1}>
                     {item.title}
@@ -399,6 +407,7 @@ export const SearchView: React.FC = () => {
                 isPlaying={isPlaying}
                 onPress={() => playTrack(item, results)}
                 onMorePress={() => openActionSheet(item)}
+                onArtworkError={() => hideArtwork(item.id)}
               />
             )}
             ListEmptyComponent={
@@ -429,6 +438,7 @@ export const SearchView: React.FC = () => {
                     >
                       <Image
                         source={{ uri: matchedArtist.thumbnailUrl }}
+                        onError={() => hideArtwork(matchedArtist.id)}
                         style={styles.artistHeroAvatar}
                         contentFit="cover"
                       />
@@ -457,7 +467,8 @@ export const SearchView: React.FC = () => {
                       onPress={() => playTrack(topResult, results)}
                     >
                       <Image
-                        source={{ uri: topResult.thumbnail }}
+                        source={{ uri: trackArtwork(topResult) }}
+                        onError={() => hideArtwork(topResult.id)}
                         style={styles.topResultThumb}
                         contentFit="cover"
                       />
@@ -492,6 +503,7 @@ export const SearchView: React.FC = () => {
                 isPlaying={isPlaying}
                 onPress={() => playTrack(item, results)}
                 onMorePress={() => openActionSheet(item)}
+                onArtworkError={() => hideArtwork(item.id)}
               />
             )}
             ListFooterComponent={
@@ -517,6 +529,7 @@ export const SearchView: React.FC = () => {
                       >
                         <Image
                           source={{ uri: album.thumbnailUrl }}
+                          onError={() => hideArtwork(album.id)}
                           style={styles.albumHorizontalThumb}
                           contentFit="cover"
                         />
@@ -575,7 +588,7 @@ export const SearchView: React.FC = () => {
                     {chart.title}
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-                    {chart.items.map((track) => (
+                    {chart.items.filter(track => !failedArtwork.has(track.id)).map((track) => (
                       <TouchableOpacity
                         key={track.id}
                         style={{ width: 130 }}
@@ -583,7 +596,8 @@ export const SearchView: React.FC = () => {
                         onPress={() => playTrack(track, chart.items)}
                       >
                         <Image
-                          source={{ uri: track.thumbnail }}
+                          source={{ uri: trackArtwork(track) }}
+                          onError={() => hideArtwork(track.id)}
                           style={{ width: 130, height: 130, borderRadius: 12, backgroundColor: Colors.card }}
                           contentFit="cover"
                         />

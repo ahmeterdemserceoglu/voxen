@@ -1,4 +1,5 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
+import { appAlert } from '../utils/appAlert';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
@@ -11,8 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   PanResponder,
 } from 'react-native';
@@ -20,11 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { Colors } from '../constants/theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const AuthModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const {
     isAuthModalOpen,
     closeAuthModal,
@@ -44,9 +43,10 @@ export const AuthModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.82;
-  const fullHeight = SCREEN_HEIGHT * 0.95;
+  const defaultHeight = windowHeight * 0.82;
+  const fullHeight = windowHeight * 0.95;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isAuthModalOpen) {
@@ -54,6 +54,10 @@ export const AuthModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isAuthModalOpen]);
+
+  useEffect(() => {
+    if (isAuthModalOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -64,6 +68,7 @@ export const AuthModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -72,11 +77,11 @@ export const AuthModal: React.FC = () => {
       onPanResponderRelease: (_, gestureState) => {
         // Explicit swipe UP -> expand
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           // Explicit swipe DOWN
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeAuthModal();
           }
@@ -99,12 +104,12 @@ export const AuthModal: React.FC = () => {
 
   const handleForgotPassword = async () => {
     if (!email.trim()) {
-      Alert.alert('E-posta Gerekli', 'Lütfen önce e-posta adresinizi giriniz.');
+      appAlert('E-posta Gerekli', 'Lütfen önce e-posta adresinizi giriniz.');
       return;
     }
     const success = await resetPassword(email);
     if (success) {
-      Alert.alert('Başarılı', 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
+      appAlert('Başarılı', 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.');
     }
   };
 

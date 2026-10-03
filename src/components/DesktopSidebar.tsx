@@ -25,16 +25,6 @@ export const DesktopSidebar: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.brandBlock}>
-        <View style={styles.brandRow}>
-          <View style={styles.logoMark}>
-            <Ionicons name="pulse" size={21} color="#FFFFFF" />
-          </View>
-          <Text style={styles.brand}>VOXEN</Text>
-        </View>
-        <Text style={styles.tagline}>Müziğin, senin alanın.</Text>
-      </View>
-
       <Text style={styles.groupLabel}>MENÜ</Text>
       <View style={styles.navGroup}>
         {NAV_ITEMS.map(item => {

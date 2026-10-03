@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   PanResponder,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSocialStore } from '../store/socialStore';
@@ -17,11 +17,10 @@ import { useUiStore } from '../store/uiStore';
 import { Colors } from '../constants/theme';
 import type { AppNotification } from '../models';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const NotificationsModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'notifications';
 
@@ -30,9 +29,10 @@ export const NotificationsModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.70;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.70;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isOpen) {
@@ -40,6 +40,10 @@ export const NotificationsModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -50,6 +54,7 @@ export const NotificationsModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -58,11 +63,11 @@ export const NotificationsModal: React.FC = () => {
       onPanResponderRelease: (_, gestureState) => {
         // Explicit swipe UP -> expand to full screen
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           // Explicit swipe DOWN
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }

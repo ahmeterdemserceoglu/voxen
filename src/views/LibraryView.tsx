@@ -1,4 +1,5 @@
 import { DownloadStoragePanel } from '../components/DownloadStoragePanel';
+import { appAlert } from '../utils/appAlert';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useState, useMemo } from 'react';
 import {
@@ -7,7 +8,6 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
-  Alert,
   TextInput,
   Modal,
   ScrollView,
@@ -103,7 +103,7 @@ export const LibraryView: React.FC = () => {
 
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) {
-      Alert.alert('Uyarı', 'Lütfen çalma listesi için bir ad girin.');
+      appAlert('Uyarı', 'Lütfen çalma listesi için bir ad girin.');
       return;
     }
     await createPlaylist(newPlaylistName.trim());
@@ -114,7 +114,7 @@ export const LibraryView: React.FC = () => {
   const handleImportPlaylist = async () => {
     const epoch = accountSession.generation;
     if (!importUrl.trim()) {
-      Alert.alert('Uyarı', 'Lütfen bir çalma listesi bağlantısı (URL) veya ID girin.');
+      appAlert('Uyarı', 'Lütfen bir çalma listesi bağlantısı (URL) veya ID girin.');
       return;
     }
 
@@ -125,7 +125,7 @@ export const LibraryView: React.FC = () => {
       const result = await YouTubeService.getPlaylist(importUrl.trim());
       if (!accountSession.isCurrent(epoch)) return;
       if (!result || !result.tracks || result.tracks.length === 0) {
-        Alert.alert(
+        appAlert(
           'Hata',
           'Çalma listesi bulunamadı veya parça içermiyor. Bağlantının YouTube veya YouTube Music herkese açık (public/unlisted) bir liste olduğundan emin olun.'
         );
@@ -154,7 +154,7 @@ export const LibraryView: React.FC = () => {
       openPlaylistDetail(newPlaylist);
     } catch (err: any) {
       console.warn('Import playlist error:', err);
-      Alert.alert('Hata', 'Çalma listesi içe aktarılırken bir sorun oluştu.');
+      appAlert('Hata', 'Çalma listesi içe aktarılırken bir sorun oluştu.');
       setIsImporting(false);
       setImportStatusText('');
     }
@@ -732,7 +732,7 @@ export const LibraryView: React.FC = () => {
           data={savedAlbums.filter(album => `${album.title} ${album.author || ''}`.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR')))}
           keyExtractor={album => album.id} contentContainerStyle={styles.scrollPadding}
           ListEmptyComponent={<View style={styles.emptyWrap}><Text style={styles.emptyTitle}>Kaydedilmiş albüm yok</Text><Text style={styles.emptySub}>Albüm ekranından kütüphanene kaydedebilirsin.</Text></View>}
-          renderItem={({ item }) => <TouchableOpacity onPress={() => openAlbum(item.title, item.id)} onLongPress={() => Alert.alert(item.title, 'Kütüphaneden kaldırılsın mı?', [{ text: 'Vazgeç' }, { text: 'Kaldır', style: 'destructive', onPress: () => removeAlbum(item.id) }])} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
+          renderItem={({ item }) => <TouchableOpacity onPress={() => openAlbum(item.title, item.id)} onLongPress={() => appAlert(item.title, 'Kütüphaneden kaldırılsın mı?', [{ text: 'Vazgeç' }, { text: 'Kaldır', style: 'destructive', onPress: () => removeAlbum(item.id) }])} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}>
             <Image source={{ uri: item.thumbnailUrl }} contentFit="cover" style={{ width: 72, height: 72, borderRadius: 12 }} />
             <View style={{ flex: 1, marginLeft: 14 }}><Text style={{ color: Colors.text, fontSize: 17 }} numberOfLines={2}>{item.title}</Text><Text style={{ color: Colors.textMuted, marginTop: 4 }}>{item.author} • {item.tracks.length} parça</Text></View>
             <Ionicons name="disc-outline" size={24} color={Colors.primary} />
@@ -813,7 +813,7 @@ export const LibraryView: React.FC = () => {
                       style={styles.clearTextBtn}
                       activeOpacity={0.8}
                       onPress={() => {
-                        Alert.alert(
+                        appAlert(
                           'Geçmişi Temizle',
                           'Dinleme geçmişinizi silmek istediğinize emin misiniz?',
                           [

@@ -138,3 +138,8 @@ windows-player/release/
 *.AppImage
 *.exe
 *.msi
+
+# Local build reports and release artifacts
+artifacts/
+.agent/
+.agents/

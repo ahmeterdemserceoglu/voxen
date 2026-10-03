@@ -1,8 +1,8 @@
 import { BulkDownloadButton } from './BulkDownloadButton';
+import { appAlert } from '../utils/appAlert';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Easing,
   FlatList,
@@ -313,7 +313,7 @@ export const PlaylistDetailModal: React.FC = () => {
     const trimmed = renameInput.trim();
 
     if (!trimmed) {
-      Alert.alert('Uyarı', 'Çalma listesi adı boş bırakılamaz.');
+      appAlert('Uyarı', 'Çalma listesi adı boş bırakılamaz.');
       return;
     }
 
@@ -332,7 +332,7 @@ export const PlaylistDetailModal: React.FC = () => {
     const playlistName = activePlaylistDetail.name.trim().toLocaleLowerCase('tr-TR');
 
     if (confirmation !== playlistName) {
-      Alert.alert('Hata', 'Girdiğiniz isim çalma listesi adıyla eşleşmiyor.');
+      appAlert('Hata', 'Girdiğiniz isim çalma listesi adıyla eşleşmiyor.');
       return;
     }
 

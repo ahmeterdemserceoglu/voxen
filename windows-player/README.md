@@ -1,9 +1,11 @@
 # Voxen Windows
 
-Windows 10/11 x64 için taşınabilir Voxen masaüstü uygulaması. Yerel InnerTube ve reklamsız ses çözümleyicisini içerir.
+Windows 10/11 x64 için kurulabilir Voxen masaüstü uygulaması. Yerel InnerTube ve reklamsız ses çözümleyicisini içerir.
+
+Proje kökünde ve `windows-player` klasöründe `npm ci` çalıştırın. Ardından proje kökünde:
 
 ```bash
-npm run build:windows
+npm run windows:build
 ```
 
-Çıktı `windows-player/release/Voxen-1.0.1-Windows-x64.exe` konumuna yazılır.
+Kurulum dosyası `windows-player/release/Voxen-Setup-1.0.1-Windows-x64.exe` konumuna yazılır.

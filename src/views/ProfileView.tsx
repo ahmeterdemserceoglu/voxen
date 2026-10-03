@@ -1,4 +1,5 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
+import { appAlert } from '../utils/appAlert';
 import React from 'react';
 import {
   StyleSheet,
@@ -6,7 +7,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -34,7 +34,7 @@ export const ProfileView: React.FC = () => {
   const email = user?.email || 'Yerel modda dinliyorsunuz';
 
   const handleSignOut = () => {
-    Alert.alert(
+    appAlert(
       'Çıkış Yap',
       'Hesabınızdan çıkış yapmak istediğinize emin misiniz? Yerel çalma listeleriniz cihazınızda kalacaktır.',
       [
@@ -246,7 +246,7 @@ export const ProfileView: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.appName}>VOXEN</Text>
           <Text style={styles.appDesc}>Material 3 • YouTube Music İstemcisi • Reklamsız</Text>
-          <Text style={styles.version}>Sürüm 1.0.0 (Expo 57 / React Native)</Text>
+          <Text style={styles.version}>Sürüm 1.0.2</Text>
         </View>
       </ScrollView>
     </View>

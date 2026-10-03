@@ -527,7 +527,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const epoch = accountSession.generation;
     const newPlaylist: Playlist = {
       id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      name: name.trim() || 'Yeni �alma Listesi',
+      name: name.trim() || 'Yeni Çalma Listesi',
       description: description?.trim(),
       visibility: 'private',
       collaborative: false,
@@ -549,7 +549,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const totalDuration = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
     const newPlaylist: Playlist = {
       id: 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      name: name.trim() || '��e Aktar�lan �alma Listesi',
+      name: name.trim() || 'İçe Aktarılan Çalma Listesi',
       description: description?.trim(),
       visibility: 'private',
       collaborative: false,

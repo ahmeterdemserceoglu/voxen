@@ -17,6 +17,7 @@ import { ProfileView } from './src/views/ProfileView';
 import { FloatingNav } from './src/components/FloatingNav';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { DesktopSidebar } from './src/components/DesktopSidebar';
+import { DesktopHeader } from './src/components/DesktopHeader';
 import { FullPlayerModal } from './src/components/FullPlayerModal';
 import { AudioEngine } from './src/components/AudioEngine';
 import { ListeningRoomEngine } from './src/components/ListeningRoomEngine';
@@ -69,6 +70,35 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!IS_DESKTOP) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || useUiStore.getState().activeModal) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, button, [contenteditable="true"], [role="button"], [role="slider"]')) return;
+      const player = useMusicStore.getState();
+      if (!player.currentTrack) return;
+      if (event.code === 'Space') {
+        event.preventDefault();
+        player.togglePlayPause();
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'ArrowRight') {
+        event.preventDefault();
+        player.skipNext();
+      } else if ((event.ctrlKey || event.metaKey) && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        player.skipPrevious();
+      } else if (player.isFullPlayerOpen && event.key === 'ArrowRight') {
+        event.preventDefault();
+        player.seekTo(Math.min(player.duration, player.position + 5000));
+      } else if (player.isFullPlayerOpen && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        player.seekTo(Math.max(0, player.position - 5000));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: Colors.background, justifyContent: 'center' }}>
@@ -79,14 +109,12 @@ export default function App() {
 
   const activeView = (
     <>
-      {activeTab === 'home' && <HomeView />}
+      {IS_DESKTOP ? <View style={{ flex: 1, display: activeTab === 'home' ? 'flex' : 'none' }}><HomeView /></View> : activeTab === 'home' && <HomeView />}
       {activeTab === 'search' && <SearchView />}
       {activeTab === 'library' && <LibraryView />}
       {activeTab === 'profile' && <ProfileView />}
     </>
   );
-
-  const desktopContentWidth = activeTab === 'profile' ? styles.desktopProfileWidth : activeTab === 'search' ? styles.desktopSearchWidth : styles.desktopContentWidth;
 
   return (
     <ErrorBoundary>
@@ -98,13 +126,16 @@ export default function App() {
           <AudioEngine />
           <ListeningRoomEngine />
 
+          {IS_DESKTOP && <DesktopHeader />}
+          <View style={{ flex: 1 }}>
+
           {IS_DESKTOP ? (
             <View style={styles.desktopShell}>
               <DesktopSidebar />
               <View style={styles.desktopWorkspace}>
                 <View style={styles.desktopBackdropGlow} pointerEvents="none" />
                 <View style={styles.desktopScreenContainer}>
-                  <View style={[styles.desktopContentFrame, desktopContentWidth]}>{activeView}</View>
+                  <View style={styles.desktopContentFrame}>{activeView}</View>
                 </View>
                 <View style={styles.desktopPlayerDock} pointerEvents="box-none">
                   <MiniPlayer />
@@ -171,6 +202,7 @@ export default function App() {
 
           {/* Full Playlist Detail View Modal */}
           <PlaylistDetailModal />
+          </View>
         </View>
       </SafeAreaProvider>
     </ErrorBoundary>
@@ -207,15 +239,12 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   desktopScreenContainer: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 0,
   },
   desktopContentFrame: {
     width: '100%',
     flex: 1,
   },
-  desktopContentWidth: { maxWidth: 1420 },
-  desktopSearchWidth: { maxWidth: 1180 },
-  desktopProfileWidth: { maxWidth: 960 },
   desktopPlayerDock: {
     position: 'absolute',
     left: 0,

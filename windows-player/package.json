@@ -8,7 +8,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:windows": "electron-builder --win portable --x64"
+    "build:windows": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "bgutils-js": "^4.0.3",
@@ -28,6 +28,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "server.js",
       "package.json"
     ],
@@ -41,11 +42,17 @@
       "icon": "../assets/icon.png",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": ["x64"]
         }
       ],
-      "artifactName": "Voxen-${version}-Windows-x64.${ext}"
+      "artifactName": "Voxen-Setup-${version}-Windows-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   }
 }

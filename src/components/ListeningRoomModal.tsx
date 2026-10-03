@@ -1,4 +1,5 @@
 import { listeningRoomService } from '../services/social/listeningRoomService';
+import { appAlert } from '../utils/appAlert';
 import { accountSession } from '../services/auth/accountStorage';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useState, useRef, useEffect } from 'react';
@@ -9,10 +10,9 @@ import {
   Modal,
   TextInput,
   TouchableOpacity,
-  Alert,
   PanResponder,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUiStore } from '../store/uiStore';
@@ -21,11 +21,10 @@ import { useAuthStore } from '../store/authStore';
 import { useSocialStore } from '../store/socialStore';
 import { Colors } from '../constants/theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const ListeningRoomModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'listeningRoom';
 
@@ -39,9 +38,10 @@ export const ListeningRoomModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.70;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.70;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isOpen) {
@@ -49,6 +49,10 @@ export const ListeningRoomModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -59,6 +63,7 @@ export const ListeningRoomModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -66,10 +71,10 @@ export const ListeningRoomModal: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }
@@ -79,7 +84,7 @@ export const ListeningRoomModal: React.FC = () => {
   ).current;
 
   const changeRoom = async (create: boolean) => {
-    if (!user) { Alert.alert('Giriş gerekli', 'Birlikte dinlemek için hesabınıza giriş yapın.'); return; }
+    if (!user) { appAlert('Giriş gerekli', 'Birlikte dinlemek için hesabınıza giriş yapın.'); return; }
     if (busy) return;
     const epoch = accountSession.generation;
     setBusy(true);
@@ -89,7 +94,7 @@ export const ListeningRoomModal: React.FC = () => {
       if (!accountSession.isCurrent(epoch)) return;
       useSocialStore.setState({ activeRoom: code, roomHostUid: room.hostUid, roomError: null });
     } catch (error) {
-      if (accountSession.isCurrent(epoch)) Alert.alert('Odaya bağlanılamadı', error instanceof Error ? error.message : 'Yeniden deneyin.');
+      if (accountSession.isCurrent(epoch)) appAlert('Odaya bağlanılamadı', error instanceof Error ? error.message : 'Yeniden deneyin.');
     } finally { setBusy(false); }
   };
   const handleCreateRoom = () => changeRoom(true);
@@ -101,7 +106,7 @@ export const ListeningRoomModal: React.FC = () => {
       if (activeRoom && roomHostUid === user?.uid) await listeningRoomService.close(activeRoom);
       setActiveRoom(null);
       setRoomCode('');
-    } catch { Alert.alert('Oda kapatılamadı', 'Bağlantınızı kontrol edip yeniden deneyin.'); }
+    } catch { appAlert('Oda kapatılamadı', 'Bağlantınızı kontrol edip yeniden deneyin.'); }
     finally { setBusy(false); }
   };
 

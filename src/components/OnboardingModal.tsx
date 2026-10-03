@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  useWindowDimensions,
   Animated,
   PanResponder,
   ActivityIndicator,
@@ -23,8 +24,6 @@ import { YouTubeService } from '../services/youtubeService';
 import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
 import type { SerializedArtist } from '../models';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 export interface TasteArtist {
   id: string;
@@ -106,6 +105,7 @@ export const POPULAR_ARTISTS_CATALOGUE: TasteArtist[] = [
 export const OnboardingModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'onboarding';
 
@@ -123,9 +123,10 @@ export const OnboardingModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.88;
-  const fullHeight = SCREEN_HEIGHT * 0.95;
+  const defaultHeight = windowHeight * 0.88;
+  const fullHeight = windowHeight * 0.95;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   // Initialize data when modal opens
   useEffect(() => {
@@ -172,6 +173,10 @@ export const OnboardingModal: React.FC = () => {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
+
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
     Animated.spring(heightAnim, {
@@ -181,6 +186,7 @@ export const OnboardingModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -188,10 +194,10 @@ export const OnboardingModal: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }

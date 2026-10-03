@@ -1,4 +1,6 @@
 import { recommendationFeedback } from '../services/recommendations/recommendationFeedback';
+import { trackArtwork } from '../utils/artwork';
+import { audioCacheService } from '../services/audioCacheService';
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -41,6 +43,9 @@ export const HomeView: React.FC = () => {
   const [podcasts, setPodcasts] = useState<PodcastChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failedArtwork, setFailedArtwork] = useState<Set<string>>(() => new Set());
+  const hideArtwork = (id: string) => setFailedArtwork(previous => new Set(previous).add(id));
+  const visibleTrack = (track: TrackItem) => !!trackArtwork(track) && !failedArtwork.has(track.id);
 
   const { playTrack, currentTrack, isPlaying, openActionSheet, openPlaylistDetail, favorites, history } = useMusicStore();
   const { user } = useAuthStore();
@@ -87,6 +92,10 @@ export const HomeView: React.FC = () => {
             .filter(section => section.items.length >= 4)
             .slice(0, 7);
           setSections([{ title: 'Hızlı Seçimler', items: feed }, ...richSections]);
+          if (IS_DESKTOP) {
+            const first = feed.find(track => !!trackArtwork(track));
+            if (first) void audioCacheService.prefetchNext(first.videoId || first.id);
+          }
           setLoading(false);
         }),
         mixGenerator.getDailyMixes(preferredGenres, followedArtists.map(a => a.name), favorites, isRefresh).then(mixes => {
@@ -109,7 +118,7 @@ export const HomeView: React.FC = () => {
     setLoading(true);
     loadFeed();
     return () => { requestId.current += 1; };
-  }, [tasteKey, user?.uid, feedbackRevision, discoveryVariety]);
+  }, [user?.uid, IS_DESKTOP ? '' : tasteKey, IS_DESKTOP ? 0 : feedbackRevision, IS_DESKTOP ? '' : discoveryVariety]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -117,7 +126,7 @@ export const HomeView: React.FC = () => {
   };
 
   // Quick picks
-  const quickPicks = sections.find((s) => s.title === 'Hızlı Seçimler')?.items || [];
+  const quickPicks = (sections.find((s) => s.title === 'Hızlı Seçimler')?.items || []).filter(visibleTrack);
 
   // Chunk quickPicks into 4-song columns for horizontal grid
   const quickPickColumns: TrackItem[][] = [];
@@ -126,13 +135,13 @@ export const HomeView: React.FC = () => {
   }
 
   // Daily discover track
-  const dailyDiscoverTrack = quickPicks[0] || sections[1]?.items?.[0];
-  const recentTracks = history.filter((track, index, all) => all.findIndex(item => item.id === track.id) === index).slice(0, 20);
+  const dailyDiscoverTrack = quickPicks[0] || sections.flatMap(section => section.items).find(visibleTrack);
+  const recentTracks = history.filter((track, index, all) => visibleTrack(track) && all.findIndex(item => item.id === track.id) === index).slice(0, 20);
   const recentColumns: TrackItem[][] = [];
   for (let i = 0; i < recentTracks.length; i += 2) recentColumns.push(recentTracks.slice(i, i + 2));
 
   // Remaining carousel sections (excluding quick picks, and definitely excluding Dinlemeye Devam Et)
-  const carouselSections = sections.filter(
+  const carouselSections = sections.map(section => ({ ...section, items: section.items.filter(visibleTrack) })).filter(section => section.items.length > 0).filter(
     (s) => s.title !== 'Hızlı Seçimler' && s.title !== 'Dinlemeye Devam Et'
   );
 
@@ -145,7 +154,7 @@ export const HomeView: React.FC = () => {
           { paddingTop: IS_DESKTOP ? 28 : (insets.top || 16) + 10, paddingBottom: IS_DESKTOP ? 136 : 170 },
         ]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
+        refreshControl={IS_DESKTOP ? undefined :
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
       >
@@ -185,15 +194,15 @@ export const HomeView: React.FC = () => {
               {unreadCount > 0 && <View style={styles.notificationBadge} />}
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {!IS_DESKTOP && <TouchableOpacity
               style={styles.headerActionBtn}
               activeOpacity={0.7}
               onPress={() => openModal('settings')}
             >
               <Ionicons name="settings-outline" size={17} color={Colors.textSecondary} />
-            </TouchableOpacity>
+            </TouchableOpacity>}
 
-            <TouchableOpacity
+            {!IS_DESKTOP && <TouchableOpacity
               style={styles.profileBtn}
               activeOpacity={0.7}
               onPress={() => setActiveTab('profile')}
@@ -211,7 +220,7 @@ export const HomeView: React.FC = () => {
                   color={user ? Colors.primary : Colors.textSecondary}
                 />
               )}
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         </View>
 
@@ -270,7 +279,8 @@ export const HomeView: React.FC = () => {
                           >
                             <View style={styles.thumbWrapper}>
                               <Image
-                                source={{ uri: item.thumbnail }}
+                                source={{ uri: trackArtwork(item) }}
+                                onError={() => hideArtwork(item.id)}
                                 style={styles.thumb}
                                 contentFit="cover"
                                 transition={150}
@@ -342,12 +352,15 @@ export const HomeView: React.FC = () => {
                   onPress={() => playTrack(dailyDiscoverTrack, quickPicks)}
                   >
                     <Image
-                    source={{ uri: dailyDiscoverTrack.thumbnail }}
-                    style={styles.heroBg}
+                    source={{ uri: trackArtwork(dailyDiscoverTrack, true) }}
+                    style={[styles.heroBg, IS_DESKTOP && styles.desktopHeroArtwork]}
+                    onError={() => hideArtwork(dailyDiscoverTrack.id)}
                     contentFit="cover"
                   />
                   <LinearGradient
-                    colors={['rgba(0,0,0,0.2)', 'rgba(11, 11, 11, 0.75)', '#0B0B0B']}
+                    colors={IS_DESKTOP ? ['#17171C', 'rgba(23,23,28,0.92)', 'rgba(23,23,28,0.04)'] : ['rgba(0,0,0,0.2)', 'rgba(11,11,11,0.75)', '#0B0B0B']}
+                    start={IS_DESKTOP ? { x: 0, y: 0 } : undefined}
+                    end={IS_DESKTOP ? { x: 1, y: 0 } : undefined}
                     style={StyleSheet.absoluteFill}
                   />
                   <View style={styles.heroContent}>
@@ -385,7 +398,7 @@ export const HomeView: React.FC = () => {
                         const active = currentTrack?.id === track.id;
                         return (
                           <TouchableOpacity key={track.id} style={[styles.recentCard, active && styles.recentCardActive]} activeOpacity={0.82} onPress={() => playTrack(track, recentTracks)}>
-                            <Image source={{ uri: track.thumbnail || track.thumbnails?.medium }} style={styles.recentCover} contentFit="cover" />
+                            <Image source={{ uri: trackArtwork(track) }} onError={() => hideArtwork(track.id)} style={styles.recentCover} contentFit="cover" />
                             <View style={styles.recentMeta}>
                               <Text style={[styles.recentTitle, active && styles.recentTitleActive]} numberOfLines={1}>{track.title}</Text>
                               <Text style={styles.recentArtist} numberOfLines={1}>{track.artist || track.artistName}</Text>
@@ -418,7 +431,7 @@ export const HomeView: React.FC = () => {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.horizontalRow}
                 >
-                  {dailyMixes.map((mix, idx) => {
+                  {dailyMixes.filter(mix => (mix.coverUrl || trackArtwork(mix.tracks[0] || { thumbnail: '' })) && !failedArtwork.has(mix.id)).map((mix, idx) => {
                     const mixThumb = mix.coverUrl || mix.tracks[0]?.thumbnail;
                     const artists = [...new Set(mix.tracks.map(track => track.artist || track.artistName).filter(Boolean))].slice(0, 3).join(' • ');
                     return (
@@ -428,7 +441,7 @@ export const HomeView: React.FC = () => {
                         activeOpacity={0.88}
                         onPress={() => handleOpenMix(mix)}
                       >
-                        {mixThumb ? <Image source={{ uri: mixThumb }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                        {mixThumb ? <Image source={{ uri: mixThumb }} onError={() => hideArtwork(mix.id)} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
                         <LinearGradient
                           colors={['rgba(0,0,0,0.06)', 'rgba(0,0,0,0.48)', idx === 0 ? 'rgba(120,4,12,0.96)' : 'rgba(10,10,14,0.98)']}
                           locations={[0, 0.48, 1]}
@@ -487,7 +500,7 @@ export const HomeView: React.FC = () => {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.horizontalRow}
                 >
-                  {podcasts.map((podcast) => (
+                  {podcasts.filter(podcast => podcast.thumbnailUrl && !failedArtwork.has(podcast.id)).map((podcast) => (
                     <TouchableOpacity
                       key={podcast.id}
                       style={styles.podcastCard}
@@ -496,6 +509,7 @@ export const HomeView: React.FC = () => {
                     >
                       <Image
                         source={{ uri: podcast.thumbnailUrl }}
+                        onError={() => hideArtwork(podcast.id)}
                         style={styles.podcastCover}
                         contentFit="cover"
                         transition={150}
@@ -549,7 +563,8 @@ export const HomeView: React.FC = () => {
                       >
                         <View style={[styles.cardCoverWrapper, secIdx % 3 === 0 && styles.cardCoverWide, secIdx % 3 === 1 && styles.cardCoverTall]}>
                           <Image
-                            source={{ uri: item.thumbnail }}
+                            source={{ uri: trackArtwork(item) }}
+                            onError={() => hideArtwork(item.id)}
                             style={styles.cardCover}
                             contentFit="cover"
                             transition={150}
@@ -825,6 +840,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  desktopHeroArtwork: { position: 'absolute', right: 0, top: 0, width: '48%', height: '100%' },
   heroContent: {
     position: 'absolute',
     bottom: 14,

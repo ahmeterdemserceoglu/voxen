@@ -1,4 +1,5 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
+import { appAlert } from '../utils/appAlert';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
@@ -9,11 +10,10 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Switch,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   PanResponder,
 } from 'react-native';
@@ -28,8 +28,6 @@ import { YouTubeService } from '../services/youtubeService';
 import { POPULAR_ARTISTS_CATALOGUE } from './OnboardingModal';
 import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
-
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 const SPACE_AVATARS = [
   // Deep Space Nebula & Cosmic Dust
@@ -53,6 +51,7 @@ const SPACE_AVATARS = [
 export const EditProfileModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { activeModal, closeModal } = useUiStore();
   const { user, setUser } = useAuthStore();
@@ -109,9 +108,10 @@ export const EditProfileModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.85;
-  const fullHeight = SCREEN_HEIGHT * 0.95;
+  const defaultHeight = windowHeight * 0.85;
+  const fullHeight = windowHeight * 0.95;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isVisible) {
@@ -119,6 +119,10 @@ export const EditProfileModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isVisible]);
+
+  useEffect(() => {
+    if (isVisible) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -129,6 +133,7 @@ export const EditProfileModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -136,10 +141,10 @@ export const EditProfileModal: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }
@@ -187,7 +192,7 @@ export const EditProfileModal: React.FC = () => {
     const trimmedUsername = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
 
     if (!trimmedName) {
-      Alert.alert('Eksik Bilgi', 'Lütfen geçerli bir isim girin.');
+      appAlert('Eksik Bilgi', 'Lütfen geçerli bir isim girin.');
       return;
     }
 
@@ -201,7 +206,7 @@ export const EditProfileModal: React.FC = () => {
           originalUsername
         );
         if (!success) {
-          Alert.alert('Kullanıcı Adı Dolu', 'Bu kullanıcı adı başka bir kullanıcı tarafından alınmış.');
+          appAlert('Kullanıcı Adı Dolu', 'Bu kullanıcı adı başka bir kullanıcı tarafından alınmış.');
           setIsSaving(false);
           return;
         }
@@ -249,11 +254,11 @@ export const EditProfileModal: React.FC = () => {
       }
 
       closeModal();
-      Alert.alert('Başarılı', 'Profil bilgileriniz güncellendi.');
+      appAlert('Başarılı', 'Profil bilgileriniz güncellendi.');
     } catch (err: any) {
       console.error('handleSave full error:', err);
       const msg = err?.message || 'Profil kaydedilirken bir sorun oluştu.';
-      Alert.alert('Hata', msg);
+      appAlert('Hata', msg);
     } finally {
       setIsSaving(false);
     }

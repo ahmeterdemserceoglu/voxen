@@ -1,4 +1,5 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
+import { appAlert } from '../utils/appAlert';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
@@ -8,12 +9,11 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   PanResponder,
   Animated,
-  Dimensions,
+  useWindowDimensions,
   Keyboard,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -23,12 +23,11 @@ import { useMusicStore, Playlist } from '../store/musicStore';
 import { PlaylistCollageThumb } from './PlaylistCollageThumb';
 import { Colors } from '../constants/theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const AddToPlaylistModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const {
     isAddToPlaylistOpen,
     addToPlaylistSong,
@@ -61,16 +60,23 @@ export const AddToPlaylistModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.72;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.72;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isAddToPlaylistOpen) {
       setIsFullScreen(false);
+      setIsCreatingNew(false);
+      setNewPlaylistName('');
       heightAnim.setValue(defaultHeight);
     }
   }, [isAddToPlaylistOpen]);
+
+  useEffect(() => {
+    if (isAddToPlaylistOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -81,6 +87,7 @@ export const AddToPlaylistModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -89,11 +96,11 @@ export const AddToPlaylistModal: React.FC = () => {
       onPanResponderRelease: (_, gestureState) => {
         // Explicit swipe UP -> expand to full screen
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           // Explicit swipe DOWN
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeAddToPlaylist();
           }
@@ -106,7 +113,7 @@ export const AddToPlaylistModal: React.FC = () => {
 
   const handleCreateAndAdd = async () => {
     if (!newPlaylistName.trim()) {
-      Alert.alert('Hata', 'Lütfen çalma listesi için bir ad girin.');
+      appAlert('Hata', 'Lütfen çalma listesi için bir ad girin.');
       return;
     }
 

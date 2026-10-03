@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   PanResponder,
 } from 'react-native';
@@ -24,11 +24,10 @@ import { socialService } from '../services/social/socialService';
 import { Colors } from '../constants/theme';
 import type { UserProfile, Playlist } from '../models';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const UserProfileModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { activeModal, activeUserUid, closeModal } = useUiStore();
   const { user } = useAuthStore();
@@ -46,9 +45,10 @@ export const UserProfileModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.80;
-  const fullHeight = SCREEN_HEIGHT * 0.95;
+  const defaultHeight = windowHeight * 0.80;
+  const fullHeight = windowHeight * 0.95;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   useEffect(() => {
     if (isVisible) {
@@ -56,6 +56,10 @@ export const UserProfileModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isVisible]);
+
+  useEffect(() => {
+    if (isVisible) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
 
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
@@ -66,6 +70,7 @@ export const UserProfileModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -73,10 +78,10 @@ export const UserProfileModal: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }

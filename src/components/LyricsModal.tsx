@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   PanResponder,
   Animated,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMusicStore } from '../store/musicStore';
@@ -18,20 +18,20 @@ import { useUiStore } from '../store/uiStore';
 import { lyricsService, Lyrics, LyricsLine } from '../services/lyrics/lyricsService';
 import { Colors } from '../constants/theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 export const LyricsModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'lyrics';
+  const { height: windowHeight } = useWindowDimensions();
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = SCREEN_HEIGHT * 0.78;
-  const fullHeight = SCREEN_HEIGHT * 0.94;
+  const defaultHeight = windowHeight * 0.78;
+  const fullHeight = windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
+  const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
   const scrollRef = useRef<ScrollView>(null);
   const lineLayouts = useRef<{ [key: number]: number }>({});
@@ -48,6 +48,12 @@ export const LyricsModal: React.FC = () => {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
+  }, [windowHeight]);
+
+  useEffect(() => () => { if (userScrollTimeout.current) clearTimeout(userScrollTimeout.current); }, []);
+
   const toggleFullScreen = (toFull: boolean) => {
     setIsFullScreen(toFull);
     Animated.spring(heightAnim, {
@@ -57,6 +63,7 @@ export const LyricsModal: React.FC = () => {
       tension: 50,
     }).start();
   };
+  toggleFullScreenRef.current = toggleFullScreen;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -64,10 +71,10 @@ export const LyricsModal: React.FC = () => {
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 8,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy < -30) {
-          toggleFullScreen(true);
+          toggleFullScreenRef.current(true);
         } else if (gestureState.dy > 60) {
           if (fullScreenRef.current) {
-            toggleFullScreen(false);
+            toggleFullScreenRef.current(false);
           } else {
             closeModal();
           }

@@ -161,7 +161,7 @@ export class YouTubeService {
             renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
           const thumbnail =
             thumbnails[thumbnails.length - 1]?.url ||
-            'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500';
+            '';
 
           const videoId =
             renderer.playlistItemData?.videoId ||
@@ -410,7 +410,7 @@ export class YouTubeService {
         const thumb =
           thumbs[thumbs.length - 1]?.url?.replace(/=w\d+-h\d+/, '=w500-h500') ||
           thumbnailUrl ||
-          'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500';
+          '';
 
         const videoId =
           r.playlistItemData?.videoId ||
