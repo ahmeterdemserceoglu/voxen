@@ -423,7 +423,8 @@ class OfflineDownloadService {
       logger.info(TAG, `Cancelled download for ${trackId}`);
     }
     nativeDownloader()?.cancel(`${encodeURIComponent(accountSession.uid || 'guest')}_${encodeURIComponent(trackId)}`);
-    this._markCancelled(trackId);
+    // Keep active requests registered until their abort has settled.
+    if (!controller) this._markCancelled(trackId);
   }
 
   cancelAllDownloads(): void {
