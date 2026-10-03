@@ -22,6 +22,11 @@ export interface DownloadEntry {
   /** 0–100 */
   progress: number;
   error?: string;
+  track?: Track;
+  bytesDownloaded?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
+  remainingSeconds?: number;
 }
 
 function nativeDownloader(): any {
@@ -31,7 +36,10 @@ function nativeDownloader(): any {
 type ProgressCallback = (trackId: string, progress: number) => void;
 
 class OfflineDownloadService {
-  constructor() { accountSession.subscribe(() => this.cancelAllDownloads()); }
+  constructor() { accountSession.subscribe(() => {
+    this.cancelAllDownloads(); this.downloadEntries.clear(); this.byteSamples.clear();
+    this.session = accountSession.generation; this.emitProgress('', 0);
+  }); }
   private indexWrite: Promise<unknown> = Promise.resolve();
   private session = -1;
   private cancelRevision = 0;
@@ -62,6 +70,8 @@ class OfflineDownloadService {
 
   /** External progress listeners */
   private progressListeners = new Set<ProgressCallback>();
+  private byteSamples = new Map<string, { bytes: number; time: number }>();
+  private reconciling: Promise<void> | null = null;
 
   // ── Directory ───────────────────────────────────────────────────────────────
 
@@ -79,6 +89,11 @@ class OfflineDownloadService {
   }
 
   private emitProgress(trackId: string, progress: number) {
+    const entry = this.downloadEntries.get(trackId);
+    if (entry && entry.state !== 'downloading') {
+      entry.bytesPerSecond = 0; entry.remainingSeconds = undefined;
+      this.byteSamples.delete(trackId);
+    }
     this.progressListeners.forEach((cb) => cb(trackId, progress));
   }
 
@@ -97,6 +112,13 @@ class OfflineDownloadService {
   }
 
   private async reconcileNative() {
+    if (this.reconciling) return this.reconciling;
+    const operation = this.reconcileNativeOnce();
+    this.reconciling = operation;
+    try { await operation; } finally { if (this.reconciling === operation) this.reconciling = null; }
+  }
+
+  private async reconcileNativeOnce() {
     const native = nativeDownloader();
     if (!native) return;
     const epoch = accountSession.generation; const storage = accountStorage.capture();
@@ -109,7 +131,11 @@ class OfflineDownloadService {
       if (!trackId) continue;
       const progress = job.total > 0 ? Math.min(99, Math.floor(job.bytes * 100 / job.total)) : 0;
       if (job.state !== 'done') {
-        this.downloadEntries.set(trackId, { trackId, state: ['queued', 'downloading'].includes(job.state) ? 'downloading' : job.state === 'paused' ? 'cancelled' : 'error', progress, error: job.error });
+        const bytes = Math.max(0, Number(job.bytes) || 0), total = Math.max(0, Number(job.total) || 0);
+        const previous = this.byteSamples.get(trackId), time = Date.now();
+        const speed = previous && time > previous.time && bytes >= previous.bytes ? (bytes - previous.bytes) * 1000 / (time - previous.time) : 0;
+        this.byteSamples.set(trackId, { bytes, time });
+        this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, track: job.track, state: ['queued', 'downloading'].includes(job.state) ? 'downloading' : job.state === 'paused' ? 'cancelled' : 'error', progress, error: job.error, bytesDownloaded: bytes, totalBytes: total, bytesPerSecond: speed, remainingSeconds: total > bytes && speed > 0 ? (total - bytes) / speed : undefined });
         this.emitProgress(trackId, progress);
         continue;
       }
@@ -119,7 +145,8 @@ class OfflineDownloadService {
       }]);
       if (!accountSession.isCurrent(epoch)) return;
       native.acknowledge(job.key);
-      this.downloadEntries.set(trackId, { trackId, state: 'done', progress: 100 });
+      this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'done', progress: 100 });
+      this.emitProgress(trackId, 100);
     }
   }
 
@@ -216,7 +243,7 @@ class OfflineDownloadService {
 
     const controller = new AbortController();
     this.activeControllers.set(trackId, controller);
-    this.downloadEntries.set(trackId, { trackId, state: 'downloading', progress: 0 });
+    this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, track, state: 'downloading', progress: 0 });
     this.emitProgress(trackId, 0);
     onProgress?.(0);
 
@@ -231,7 +258,7 @@ class OfflineDownloadService {
           const list = await this.getDownloadedTracks();
           const found = list.find((d) => d.track.id === trackId) || null;
           if (found) {
-            this.downloadEntries.set(trackId, { trackId, state: 'done', progress: 100 });
+            this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'done', progress: 100 });
             this.emitProgress(trackId, 100);
             onProgress?.(100);
             return found;
@@ -257,7 +284,7 @@ class OfflineDownloadService {
           });
           committed = true;
           native.acknowledge(key);
-          this.downloadEntries.set(trackId, { trackId, state: 'done', progress: 100 }); this.emitProgress(trackId, 100); onProgress?.(100);
+          this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'done', progress: 100 }); this.emitProgress(trackId, 100); onProgress?.(100);
           return downloadedItem;
         } finally { clearInterval(timer); controller.signal.removeEventListener('abort', abort); }
       }
@@ -309,6 +336,7 @@ class OfflineDownloadService {
         // Stream chunks with progress
         const chunks: Uint8Array[] = [];
         let received = 0;
+        let sampleBytes = 0, sampleTime = Date.now();
 
         while (true) {
           const { done, value } = await reader.read();
@@ -317,9 +345,13 @@ class OfflineDownloadService {
           chunks.push(value);
           received += value.length;
 
-          if (contentLength > 0) {
-            const pct = Math.min(99, Math.round(5 + (received / contentLength) * 93));
-            this.downloadEntries.set(trackId, { trackId, state: 'downloading', progress: pct });
+          const now = Date.now();
+          if (now - sampleTime >= 250) {
+            const speed = (received - sampleBytes) * 1000 / (now - sampleTime);
+            sampleBytes = received; sampleTime = now;
+            const pct = contentLength > 0 ? Math.min(99, Math.round(5 + (received / contentLength) * 93)) : 5;
+            this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'downloading', progress: pct });
+            Object.assign(this.downloadEntries.get(trackId)!, { bytesDownloaded: received, totalBytes: contentLength, bytesPerSecond: speed, remainingSeconds: contentLength > received && speed > 0 ? (contentLength - received) / speed : undefined });
             this.emitProgress(trackId, pct);
             onProgress?.(pct);
           }
@@ -360,7 +392,7 @@ class OfflineDownloadService {
       committed = true;
       if (!accountSession.isCurrent(epoch)) return null;
 
-      this.downloadEntries.set(trackId, { trackId, state: 'done', progress: 100 });
+      this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'done', progress: 100 });
       this.emitProgress(trackId, 100);
       onProgress?.(100);
 
@@ -373,7 +405,7 @@ class OfflineDownloadService {
       }
       const errMsg = err instanceof Error ? err.message : 'Bilinmeyen hata';
       logger.error(TAG, `Failed to download track ${trackId}`, err);
-      this.downloadEntries.set(trackId, { trackId, state: 'error', progress: 0, error: errMsg });
+      this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'error', progress: 0, error: errMsg });
       this.emitProgress(trackId, 0);
       return null;
     } finally {
@@ -390,6 +422,8 @@ class OfflineDownloadService {
       controller.abort();
       logger.info(TAG, `Cancelled download for ${trackId}`);
     }
+    nativeDownloader()?.cancel(`${encodeURIComponent(accountSession.uid || 'guest')}_${encodeURIComponent(trackId)}`);
+    this._markCancelled(trackId);
   }
 
   cancelAllDownloads(): void {
@@ -403,7 +437,7 @@ class OfflineDownloadService {
   }
 
   private _markCancelled(trackId: string) {
-    this.downloadEntries.set(trackId, { trackId, state: 'cancelled', progress: 0 });
+    this.downloadEntries.set(trackId, { ...this.downloadEntries.get(trackId), trackId, state: 'cancelled', progress: 0 });
     this.emitProgress(trackId, 0);
     this.activeControllers.delete(trackId);
     logger.info(TAG, `Download cancelled: ${trackId}`);

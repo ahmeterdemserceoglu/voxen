@@ -5,7 +5,7 @@ const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
 const absoluteLocalUri = (uri: string) => uri?.startsWith('/') ? `${API_ORIGIN}${uri}` : uri;
 export interface DownloadedTrack { track: Track; localUri: string; downloadedAt: number; sizeBytes: number }
 export type DownloadState = 'idle' | 'downloading' | 'done' | 'error' | 'cancelled';
-export interface DownloadEntry { trackId: string; state: DownloadState; progress: number; error?: string }
+export interface DownloadEntry { trackId: string; state: DownloadState; progress: number; error?: string; track?: Track; bytesDownloaded?: number; totalBytes?: number; bytesPerSecond?: number; remainingSeconds?: number }
 type ProgressCallback = (trackId: string, progress: number) => void;
 class DesktopOfflineDownloadService {
   private entries = new Map<string, DownloadEntry>();

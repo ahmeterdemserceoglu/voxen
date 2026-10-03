@@ -2,6 +2,7 @@ package com.voxen.music
 
 import android.os.Build
 import android.os.Bundle
+import android.content.pm.ActivityInfo
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -17,6 +18,7 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
   }
 
   override fun onNewIntent(intent: android.content.Intent) {

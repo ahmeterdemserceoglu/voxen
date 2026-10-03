@@ -92,10 +92,10 @@ android {
     defaultConfig {
         applicationId 'com.voxen.music'
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        targetSdkVersion 36
         testInstrumentationRunner "com.voxen.music.playback.PlaybackInstrumentation"
-        versionCode 3
-        versionName "1.0.2"
+        versionCode 4
+        versionName "1.0.3"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
