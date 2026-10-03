@@ -13,6 +13,7 @@ import {
   PanResponder,
   Animated,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore, Theme } from '../store/settingsStore';
@@ -21,6 +22,8 @@ import { useLibraryStore } from '../store/libraryStore';
 import { useUiStore } from '../store/uiStore';
 import { youtubeCache } from '../services/youtube/youtubeCache';
 import { Colors } from '../constants/theme';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const SettingsModal: React.FC = () => {
   const Colors = useThemeColors();
@@ -178,12 +181,20 @@ export const SettingsModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Drag & Header Area */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
+            {!IS_DESKTOP && <View style={styles.handle} />}
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Ayarlar</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Kapat"
+                onPress={closeModal}
+                style={styles.closeBtn}
+              >
+                <Ionicons name="close" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -394,8 +405,10 @@ export const SettingsModal: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -404,7 +417,12 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingBottom: 30,
+    borderRadius: IS_DESKTOP ? 24 : undefined,
+    width: IS_DESKTOP ? Math.min(680, 800) : '100%',
+    maxHeight: IS_DESKTOP ? '86%' : undefined,
+    paddingBottom: IS_DESKTOP ? 20 : 30,
+    borderWidth: IS_DESKTOP ? 1 : 0,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   topBar: {
     paddingTop: 12,

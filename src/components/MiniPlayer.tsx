@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
 import { formatTime } from '../utils/formatters';
+import { trackArtwork } from '../utils/artwork';
 import { Colors } from '../constants/theme';
 
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
@@ -129,7 +130,13 @@ export const MiniPlayer: React.FC = () => {
         </View>
         <View style={styles.desktopContentRow}>
           <TouchableOpacity style={styles.desktopTrackArea} activeOpacity={0.82} onPress={openFullPlayer}>
-            <Image source={{ uri: currentTrack.thumbnail }} style={styles.desktopArtwork} contentFit="cover" transition={180} />
+            <Image
+              source={{ uri: trackArtwork(currentTrack) }}
+              cachePolicy="memory-disk"
+              style={styles.desktopArtwork}
+              contentFit="cover"
+              transition={180}
+            />
             <View style={styles.desktopTrackInfo}>
               <Text style={styles.desktopTitle} numberOfLines={1}>{currentTrack.title}</Text>
               <Text style={styles.desktopArtist} numberOfLines={1}>{currentTrack.artist}</Text>
@@ -193,7 +200,8 @@ export const MiniPlayer: React.FC = () => {
         <View style={styles.contentRow}>
           {/* Album Art */}
           <Image
-            source={{ uri: currentTrack.thumbnail }}
+            source={{ uri: trackArtwork(currentTrack) }}
+            cachePolicy="memory-disk"
             style={styles.artwork}
             contentFit="cover"
             transition={200}

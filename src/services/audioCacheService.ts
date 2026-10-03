@@ -18,10 +18,24 @@ class AudioCacheService {
   get(videoId: string): ResolvedStreamResult | null {
     const item = this.cache.get(videoId);
     if (!item) return null;
-    // Cache valid for 4 hours (YouTube stream URLs typically valid 6h)
-    if (Date.now() - item.fetchedAt > 4 * 60 * 60 * 1000) {
+    // Cache valid for max 1 hour or until stream URL expires
+    if (Date.now() - item.fetchedAt > 60 * 60 * 1000) {
       this.cache.delete(videoId);
       return null;
+    }
+    const streamUrl = typeof item.stream === 'string' ? item.stream : item.stream.uri;
+    if (streamUrl) {
+      try {
+        const urlObj = new URL(streamUrl);
+        const expireParam = urlObj.searchParams.get('expire');
+        if (expireParam) {
+          const expiresAtMs = Number(expireParam) * 1000;
+          if (Date.now() >= expiresAtMs - 60_000) {
+            this.cache.delete(videoId);
+            return null;
+          }
+        }
+      } catch {}
     }
     return item.stream;
   }

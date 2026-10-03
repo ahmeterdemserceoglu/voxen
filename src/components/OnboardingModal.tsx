@@ -13,6 +13,7 @@ import {
   Animated,
   PanResponder,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,8 @@ import { YouTubeService } from '../services/youtubeService';
 import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
 import type { SerializedArtist } from '../models';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export interface TasteArtist {
   id: string;
@@ -346,18 +349,27 @@ export const OnboardingModal: React.FC = () => {
           onPress={closeModal}
         />
 
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, IS_DESKTOP && styles.desktopSheet, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Bar with PanResponder */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
+            {!IS_DESKTOP && <View style={styles.handle} />}
 
             <View style={styles.header}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.title}>Müzik Zevkini Güncelle</Text>
                 <Text style={styles.subtitle}>
                   Sana özel önerileri ve Günlük Karışım'ları şekillendir
                 </Text>
               </View>
+              {IS_DESKTOP && (
+                <TouchableOpacity
+                  accessibilityLabel="Kapat"
+                  onPress={closeModal}
+                  style={styles.desktopCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Tab Switcher */}
@@ -548,7 +560,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -558,6 +572,23 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
+  },
+  desktopSheet: {
+    borderRadius: 24,
+    width: 620,
+    maxWidth: '92%',
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  desktopCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
   },
   topBar: {
     paddingTop: 12,
@@ -573,6 +604,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     marginBottom: 14,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: 14,
   },
   title: {

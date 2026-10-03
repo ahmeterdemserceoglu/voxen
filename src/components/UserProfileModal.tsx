@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   Animated,
   PanResponder,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ import { firestoreService } from '../services/firebase/firestoreService';
 import { socialService } from '../services/social/socialService';
 import { Colors } from '../constants/theme';
 import type { UserProfile, Playlist } from '../models';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const UserProfileModal: React.FC = () => {
   const Colors = useThemeColors();
@@ -169,17 +172,26 @@ export const UserProfileModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.container, { height: heightAnim }]}>
+        <Animated.View style={[styles.container, IS_DESKTOP && styles.desktopContainer, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Bar with PanResponder */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
             {/* Top Drag Handle */}
-            <View style={styles.handle} />
+            {!IS_DESKTOP && <View style={styles.handle} />}
 
             {/* Top Bar Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {username || displayName}
               </Text>
+              {IS_DESKTOP && (
+                <TouchableOpacity
+                  accessibilityLabel="Kapat"
+                  onPress={closeModal}
+                  style={styles.desktopCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -315,7 +327,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -325,6 +339,14 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
+  },
+  desktopContainer: {
+    borderRadius: 24,
+    width: 580,
+    maxWidth: '92%',
+    maxHeight: '88%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   topBar: {
     paddingTop: 12,
@@ -343,6 +365,17 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
     paddingBottom: 14,
+  },
+  desktopCloseBtn: {
+    position: 'absolute',
+    right: 16,
+    top: -2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 16,

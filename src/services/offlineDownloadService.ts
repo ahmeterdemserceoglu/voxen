@@ -37,7 +37,7 @@ type ProgressCallback = (trackId: string, progress: number) => void;
 
 class OfflineDownloadService {
   constructor() { accountSession.subscribe(() => {
-    this.cancelAllDownloads(); this.downloadEntries.clear(); this.byteSamples.clear();
+    this.cancelAllDownloads(); this.downloadEntries.clear(); this.byteSamples.clear(); this.cachedDownloaded = null;
     this.session = accountSession.generation; this.emitProgress('', 0);
   }); }
   private indexWrite: Promise<unknown> = Promise.resolve();
@@ -48,10 +48,14 @@ class OfflineDownloadService {
     if (this.session === accountSession.generation) return;
     if (this.session >= 0) this.cancelAllDownloads();
     this.downloadEntries.clear();
+    this.cachedDownloaded = null;
     this.session = accountSession.generation;
   }
 
+  private cachedDownloaded: { items: DownloadedTrack[]; expiresAt: number } | null = null;
+
   private updateIndex(storage: ReturnType<typeof accountStorage.capture>, change: (items: DownloadedTrack[]) => DownloadedTrack[]) {
+    this.cachedDownloaded = null;
     const operation = this.indexWrite.then(async () => {
       const json = await storage.getItem(STORAGE_KEYS.DOWNLOADED_TRACKS);
       await storage.setItem(STORAGE_KEYS.DOWNLOADED_TRACKS, JSON.stringify(change(json ? JSON.parse(json) : [])));
@@ -175,10 +179,20 @@ class OfflineDownloadService {
   }
 
   async clearDownloads() {
+    this.checkSession();
     const epoch = accountSession.generation;
+    const storage = accountStorage.capture();
     this.cancelAllDownloads();
     const tracks = await this.getDownloadedTracks();
-    for (const item of tracks) { if (!accountSession.isCurrent(epoch)) return; await this.deleteDownloadedTrack(item.track.id); }
+    for (const item of tracks) {
+      try {
+        const file = new File(item.localUri);
+        if (file.exists) file.delete();
+      } catch {}
+    }
+    await this.updateIndex(storage, () => []);
+    this.downloadEntries.clear();
+    this.cachedDownloaded = null;
     if (accountSession.isCurrent(epoch)) nativeDownloader()?.clearPartial(accountSession.uid || 'guest');
   }
 
@@ -187,12 +201,15 @@ class OfflineDownloadService {
   async getDownloadedTracks(): Promise<DownloadedTrack[]> {
     this.checkSession();
     const epoch = accountSession.generation;
+    if (this.cachedDownloaded && this.cachedDownloaded.expiresAt > Date.now()) {
+      return this.cachedDownloaded.items;
+    }
     try {
       await this.reconcileNative();
       const json = await accountStorage.getItem(STORAGE_KEYS.DOWNLOADED_TRACKS);
       if (!json || !accountSession.isCurrent(epoch)) return [];
       const list: DownloadedTrack[] = JSON.parse(json);
-      return list.filter((item) => {
+      const valid = list.filter((item) => {
         try {
           const file = new File(item.localUri);
           return file.exists;
@@ -200,6 +217,8 @@ class OfflineDownloadService {
           return false;
         }
       });
+      this.cachedDownloaded = { items: valid, expiresAt: Date.now() + 3000 };
+      return valid;
     } catch (err) {
       logger.error(TAG, 'Error getting downloaded tracks', err);
       return [];
@@ -302,11 +321,6 @@ class OfflineDownloadService {
       const remoteUrl = typeof stream === 'string' ? stream : stream.uri;
       if (!remoteUrl) throw new Error('No audio URL resolved');
 
-      targetFile = new File(this.downloadsDir, `${encodeURIComponent(accountSession.uid || "guest")}_${encodeURIComponent(trackId)}_${Date.now()}_${epoch}.m4a`);
-      if (targetFile.exists) {
-        targetFile.delete();
-      }
-
       // Download with fetch + manual chunk tracking for progress
       const response = await fetch(remoteUrl, {
         signal: controller.signal,
@@ -318,6 +332,12 @@ class OfflineDownloadService {
       }
       const contentType = response.headers.get('Content-Type') || '';
       if (/text\/|json|html/i.test(contentType)) throw new Error('Invalid audio response');
+
+      const ext = /mp4|m4a/i.test(contentType) || /m4a|mp4/i.test(remoteUrl) ? 'm4a' : 'webm';
+      targetFile = new File(this.downloadsDir, `${encodeURIComponent(accountSession.uid || "guest")}_${encodeURIComponent(trackId)}_${Date.now()}_${epoch}.${ext}`);
+      if (targetFile.exists) {
+        targetFile.delete();
+      }
 
       const contentLength = Number(response.headers.get('Content-Length') ?? 0);
       const reader = response.body?.getReader();

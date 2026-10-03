@@ -16,21 +16,25 @@ import {
   Animated,
   PanResponder,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusicStore } from '../store/musicStore';
+import { trackArtwork } from '../utils/artwork';
 import { Colors } from '../constants/theme';
 import { useUiStore } from '../store/uiStore';
 import { YouTubeService } from '../services/youtubeService';
 import { offlineDownloadService } from '../services/offlineDownloadService';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+
 export const SongActionSheet: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { openArtist, openAlbum } = useUiStore();
   const {
     activeActionSong,
@@ -49,8 +53,8 @@ export const SongActionSheet: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = windowHeight * 0.68;
-  const fullHeight = windowHeight * 0.94;
+  const defaultHeight = IS_DESKTOP ? Math.min(580, windowHeight * 0.78) : windowHeight * 0.68;
+  const fullHeight = IS_DESKTOP ? Math.min(680, windowHeight * 0.88) : windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
   const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
@@ -194,6 +198,7 @@ export const SongActionSheet: React.FC = () => {
             <Animated.View
               style={[
                 styles.sheetContainer,
+                IS_DESKTOP && styles.desktopSheetContainer,
                 {
                   height: heightAnim,
                   paddingBottom: (insets.bottom || 16) + 12,
@@ -203,12 +208,13 @@ export const SongActionSheet: React.FC = () => {
               {/* Top Bar with PanResponder */}
               <View {...panResponder.panHandlers} style={styles.topBar}>
                 {/* Handle */}
-                <View style={styles.handle} />
+                {!IS_DESKTOP && <View style={styles.handle} />}
 
                 {/* Song Header */}
                 <View style={styles.songHeader}>
                   <Image
-                    source={{ uri: activeActionSong.thumbnail }}
+                    source={{ uri: trackArtwork(activeActionSong) }}
+                    cachePolicy="memory-disk"
                     style={styles.songThumb}
                     contentFit="cover"
                   />
@@ -394,7 +400,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
   },
   sheetContainer: {
     backgroundColor: '#161618',
@@ -402,6 +409,19 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: 20,
     overflow: 'hidden',
+  },
+  desktopSheetContainer: {
+    width: 480,
+    borderRadius: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
+    elevation: 20,
   },
   topBar: {
     paddingTop: 12,

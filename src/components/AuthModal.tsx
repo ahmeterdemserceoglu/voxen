@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { Colors } from '../constants/theme';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+
 export const AuthModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
@@ -132,15 +134,15 @@ export const AuthModal: React.FC = () => {
           onPress={closeAuthModal}
         />
 
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, IS_DESKTOP && styles.desktopSheet, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Bar with PanResponder */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
             {/* Drag Handle */}
-            <View style={styles.handle} />
+            {!IS_DESKTOP && <View style={styles.handle} />}
 
             {/* Header */}
             <View style={styles.header}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.title}>
                   {mode === 'login' ? 'Tekrar Hoş Geldiniz' : 'Voxen Hesabı Oluştur'}
                 </Text>
@@ -150,6 +152,15 @@ export const AuthModal: React.FC = () => {
                     : 'Sınırsız müzik deneyimi için hemen katılın'}
                 </Text>
               </View>
+              {IS_DESKTOP && (
+                <TouchableOpacity
+                  accessibilityLabel="Kapat"
+                  onPress={closeAuthModal}
+                  style={styles.desktopCloseBtn}
+                >
+                  <Ionicons name="close" size={20} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -274,7 +285,9 @@ export const AuthModal: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
   },
   backdrop: {
@@ -287,6 +300,24 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 44 : 32,
     overflow: 'hidden',
+  },
+  desktopSheet: {
+    borderRadius: 24,
+    width: 520,
+    maxWidth: '92%',
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingBottom: 28,
+  },
+  desktopCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
   },
   topBar: {
     paddingTop: 12,

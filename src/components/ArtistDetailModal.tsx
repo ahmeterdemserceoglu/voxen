@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Share,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,9 +23,11 @@ import {
   type ArtistReleaseItem,
   type SimilarArtistItem,
 } from '../services/youtubeService';
+import { MiniPlayer } from './MiniPlayer';
 import { Colors } from '../constants/theme';
 import type { Track } from '../models';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 400;
 
@@ -197,7 +200,7 @@ export const ArtistDetailModal: React.FC = () => {
                 {/* Edge-to-Edge "Sonsuz Ekran" Hero Artwork */}
                 <View style={styles.heroWrap}>
                   {heroImage ? (
-                    <Image source={{ uri: heroImage }} style={styles.heroImage} contentFit="cover" />
+                    <Image source={{ uri: heroImage }} style={styles.heroImage} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <View style={styles.heroFallback}>
                       <Ionicons name="person" size={80} color={Colors.textMuted} />
@@ -500,6 +503,11 @@ export const ArtistDetailModal: React.FC = () => {
             }
           />
         )}
+        {IS_DESKTOP && (
+          <View style={styles.desktopMiniDock} pointerEvents="box-none">
+            <MiniPlayer />
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -512,13 +520,20 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   },
   floatingNavBar: {
     position: 'absolute',
-    top: 50,
+    top: IS_DESKTOP ? 16 : 50,
     left: 16,
     right: 16,
     zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  desktopMiniDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
   },
   floatingCircleBtn: {
     width: 42,
@@ -708,7 +723,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     color: Colors.textMuted,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: IS_DESKTOP ? 116 : 40,
   },
   trackRow: {
     flexDirection: 'row',

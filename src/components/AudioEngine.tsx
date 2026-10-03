@@ -87,6 +87,12 @@ const TrackPlayer: React.FC<{ track: Track; revision: number }> = ({ track, revi
         if (recordedPlay) record('COMPLETE');
         clearWatchdog();
         player.pause();
+        const settings = useSettingsStore.getState();
+        if (settings.sleepTimerTrackEnd) {
+          void settings.updateSettings({ sleepTimerTrackEnd: false, sleepTimerDeadline: 0 });
+          useMusicStore.setState({ isPlaying: false, position: Math.round(status.duration * 1000), isBuffering: false, isLoadingStream: false });
+          return;
+        }
         useMusicStore.setState({ position: Math.round(status.duration * 1000), isBuffering: false, isLoadingStream: false });
         state.skipNext(true);
         return;
@@ -156,9 +162,18 @@ const TrackPlayer: React.FC<{ track: Track; revision: number }> = ({ track, revi
       const next = state.queue[state.queueIndex + 1];
       if (next) audioCacheService.prefetchNext(next.videoId || next.id).catch(() => {});
     })().catch(fail);
+    const sleepInterval = setInterval(() => {
+      const settings = useSettingsStore.getState();
+      if (settings.sleepTimerDeadline > 0 && Date.now() >= settings.sleepTimerDeadline) {
+        void settings.updateSettings({ sleepTimerDeadline: 0, sleepTimerTrackEnd: false });
+        useMusicStore.setState({ isPlaying: false });
+        player.pause();
+      }
+    }, 1000);
     return () => {
       disposed = true;
       clearWatchdog();
+      clearInterval(sleepInterval);
       statusSub.remove();
       storeSub();
       settingsSub();

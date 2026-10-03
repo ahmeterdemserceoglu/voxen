@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
 import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
+import { trackArtwork } from '../utils/artwork';
 import { Colors } from '../constants/theme';
 
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
@@ -138,7 +139,8 @@ export const FullPlayerModal: React.FC = () => {
             <View style={styles.desktopArtworkColumn}>
               <View style={styles.desktopArtworkShadow}>
                 <Image
-                  source={{ uri: currentTrack.thumbnail }}
+                  source={{ uri: trackArtwork(currentTrack, true) }}
+                  cachePolicy="memory-disk"
                   style={[styles.desktopArtwork, !!streamError && styles.artworkDimmed]}
                   contentFit="cover"
                   transition={260}
@@ -305,7 +307,8 @@ export const FullPlayerModal: React.FC = () => {
         <View style={styles.artworkContainer}>
           <View style={styles.artworkShadow}>
             <Image
-              source={{ uri: currentTrack.thumbnail }}
+              source={{ uri: trackArtwork(currentTrack, true) }}
+              cachePolicy="memory-disk"
               style={[styles.artwork, { width: artworkSize, height: artworkSize }, !!streamError && styles.artworkDimmed]}
               contentFit="cover"
               transition={300}

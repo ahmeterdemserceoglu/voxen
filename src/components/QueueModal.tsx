@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Modal, PanResponder, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, FlatList, Modal, PanResponder, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { appAlert } from '../utils/appAlert';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
 import type { Track } from '../models';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const ROW_HEIGHT = 76;
 const duration = (seconds = 0) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const cover = (track: Track) => track.thumbnail || track.thumbnails?.large || track.thumbnails?.medium || '';
@@ -119,7 +120,7 @@ export const QueueModal: React.FC = () => {
     { text: 'Vazgeç', style: 'cancel' }, { text: 'Temizle', style: 'destructive', onPress: clearQueue },
   ]);
   const header = <View>
-    <View {...headerDrag.panHandlers} style={styles.gripArea}><View style={styles.grip} /></View>
+    {!IS_DESKTOP && <View {...headerDrag.panHandlers} style={styles.gripArea}><View style={styles.grip} /></View>}
     <View style={styles.header}><View style={styles.info}><Text style={styles.heading}>Çalma sırası</Text><Text style={styles.artist}>{upcoming.length} şarkı sırada{remainingSeconds ? ` · ${Math.ceil(remainingSeconds / 60)} dk` : ''}</Text></View>
       <TouchableOpacity style={styles.iconButton} onPress={closeModal} accessibilityLabel="Çalma sırasını kapat"><Ionicons name="close" size={23} color={colors.text} /></TouchableOpacity>
     </View>
@@ -139,7 +140,7 @@ export const QueueModal: React.FC = () => {
   </View>;
   return <Modal visible={open} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={closeModal}>
     <View style={styles.overlay}><TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeModal} />
-      <Animated.View style={[styles.sheet, { height: sheetHeight, paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <Animated.View style={[styles.sheet, !IS_DESKTOP ? { height: sheetHeight, paddingBottom: Math.max(insets.bottom, 12) } : styles.desktopSheet]}>
         <FlatList ref={listRef} onLayout={event => { scroll.current.height = event.nativeEvent.layout.height; }} onContentSizeChange={(_w, h) => { scroll.current.content = h; }} onScroll={event => { scroll.current.offset = event.nativeEvent.contentOffset.y; }} scrollEventThrottle={16} data={upcoming} keyExtractor={track => track.id} ListHeaderComponent={header} scrollEnabled={!dragging} showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}
           renderItem={({ item, index }) => { const actual = (currentTrack ? queueIndex + 1 : 0) + index; return <QueueRow track={item} index={actual} first={currentTrack ? queueIndex + 1 : 0} last={queue.length - 1} onPlay={() => { void playTrack(item, queue); }} onMove={moveQueueItem} onNext={() => playNext(item)} onRemove={() => removeFromQueue(item.id)} onDrag={dragState} onGesture={dragGesture} />; }}
           ListEmptyComponent={<View style={styles.empty}><Ionicons name="list-outline" size={35} color={colors.textMuted} /><Text style={styles.emptyTitle}>Sıradaki şarkıyı sen seç</Text><Text style={styles.hint}>Şarkı menüsünden “Sıraya ekle” veya “Sıradaki çal” seçeneğini kullan.</Text></View>}
@@ -150,8 +151,23 @@ export const QueueModal: React.FC = () => {
 };
 
 const createStyles = (c: Palette) => StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,.4)' },
+  overlay: {
+    flex: 1,
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    backgroundColor: 'rgba(0,0,0,.75)',
+    padding: IS_DESKTOP ? 24 : 0,
+  },
   sheet: { backgroundColor: c.background, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
+  desktopSheet: {
+    borderRadius: 24,
+    width: 620,
+    maxWidth: '92%',
+    maxHeight: '86%',
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingBottom: 20,
+  },
   list: { paddingHorizontal: 18, paddingBottom: 20 },
   gripArea: { height: 28, justifyContent: 'center', alignItems: 'center' },
   grip: { width: 40, height: 4, borderRadius: 3, backgroundColor: c.borderLight },

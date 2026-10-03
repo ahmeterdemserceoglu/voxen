@@ -13,6 +13,7 @@ import {
   PanResponder,
   Animated,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUiStore } from '../store/uiStore';
@@ -20,6 +21,8 @@ import { useMusicStore } from '../store/musicStore';
 import { useAuthStore } from '../store/authStore';
 import { useSocialStore } from '../store/socialStore';
 import { Colors } from '../constants/theme';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const ListeningRoomModal: React.FC = () => {
   const Colors = useThemeColors();
@@ -125,15 +128,22 @@ export const ListeningRoomModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, IS_DESKTOP && styles.desktopSheet, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Drag & Header Area */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
+            {!IS_DESKTOP && <View style={styles.handle} />}
             <View style={styles.header}>
               <View>
                 <Text style={styles.headerTitle}>Birlikte Dinleme</Text>
                 <Text style={styles.headerSub}>Müziği arkadaşlarınızla gerçek zamanlı paylaşın</Text>
               </View>
+              <TouchableOpacity
+                accessibilityLabel="Kapat"
+                onPress={closeModal}
+                style={styles.closeBtn}
+              >
+                <Ionicons name="close" size={20} color={Colors.textMuted} />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -221,7 +231,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -231,6 +243,15 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 40,
+  },
+  desktopSheet: {
+    borderRadius: 24,
+    width: 580,
+    maxWidth: '92%',
+    maxHeight: '88%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingBottom: 24,
   },
   topBar: {
     paddingTop: 12,

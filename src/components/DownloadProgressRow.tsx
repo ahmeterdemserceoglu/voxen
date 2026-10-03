@@ -22,8 +22,17 @@ export const DownloadProgressRow: React.FC<DownloadProgressRowProps> = ({
   );
 
   useEffect(() => {
-    // Sync entry whenever it might have changed externally
-    setEntry(offlineDownloadService.getDownloadEntry(track.id));
+    let mounted = true;
+    const initial = offlineDownloadService.getDownloadEntry(track.id);
+    setEntry(initial);
+
+    if (initial.state !== 'downloading' && initial.state !== 'done') {
+      offlineDownloadService.isDownloaded(track.id).then((downloaded) => {
+        if (mounted && downloaded) {
+          setEntry({ trackId: track.id, state: 'done', progress: 100 });
+        }
+      }).catch(() => {});
+    }
 
     const unsub = offlineDownloadService.addProgressListener((id, progress) => {
       if (id !== track.id) return;
@@ -34,7 +43,10 @@ export const DownloadProgressRow: React.FC<DownloadProgressRowProps> = ({
       }
     });
 
-    return unsub;
+    return () => {
+      mounted = false;
+      unsub();
+    };
   }, [track.id]);
 
   const handlePress = async () => {

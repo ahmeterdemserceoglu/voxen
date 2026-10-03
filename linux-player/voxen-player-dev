@@ -1,6 +1,0 @@
-#!/bin/sh
-set -eu
-ROOT_DIR=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
-export VOXEN_WEB_ROOT="$ROOT_DIR/dist-linux"
-export VOXEN_PLAYER_PORT=${VOXEN_PLAYER_PORT:-48732}
-node "$ROOT_DIR/linux-player/server.js"

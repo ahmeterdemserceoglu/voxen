@@ -10,6 +10,7 @@ import {
   PanResponder,
   Animated,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSocialStore } from '../store/socialStore';
@@ -17,10 +18,12 @@ import { useUiStore } from '../store/uiStore';
 import { Colors } from '../constants/theme';
 import type { AppNotification } from '../models';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+
 export const NotificationsModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'notifications';
 
@@ -29,8 +32,8 @@ export const NotificationsModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = windowHeight * 0.70;
-  const fullHeight = windowHeight * 0.94;
+  const defaultHeight = IS_DESKTOP ? Math.min(640, windowHeight * 0.8) : windowHeight * 0.70;
+  const fullHeight = IS_DESKTOP ? Math.min(760, windowHeight * 0.9) : windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
   const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
@@ -112,10 +115,10 @@ export const NotificationsModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, IS_DESKTOP && styles.desktopSheet, { height: heightAnim }]}>
           {/* Top Drag & Header Area */}
           <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
+            {!IS_DESKTOP && <View style={styles.handle} />}
             <View style={styles.header}>
               <View>
                 <Text style={styles.headerTitle}>Bildirimler</Text>
@@ -128,6 +131,9 @@ export const NotificationsModal: React.FC = () => {
                     <Text style={styles.readAllText}>Tümünü Oku</Text>
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity style={styles.closeBtn} onPress={closeModal} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close" size={18} color={Colors.text} />
+                </TouchableOpacity>
               </View>
             </View>
           </View>
@@ -159,7 +165,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -168,6 +175,19 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+  },
+  desktopSheet: {
+    width: 580,
+    borderRadius: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
+    elevation: 20,
   },
   topBar: {
     paddingTop: 12,

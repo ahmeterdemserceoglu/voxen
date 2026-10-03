@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Pressable,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { useMusicStore } from '../store/musicStore';
 import { YouTubeService, PodcastChannel, PodcastEpisode } from '../services/youtubeService';
 import { Colors } from '../constants/theme';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_W - 48) / 2;
 
@@ -165,7 +167,7 @@ export const PodcastsModal: React.FC = () => {
                 <Ionicons name="chevron-back" size={22} color={Colors.text} />
               </TouchableOpacity>
             ) : (
-              <View style={styles.handle} />
+              !IS_DESKTOP ? <View style={styles.handle} /> : null
             )}
             <Text style={styles.headerTitle} numberOfLines={1}>
               {selectedChannel ? selectedChannel.title : '🎙️ Podcast'}
@@ -231,7 +233,9 @@ export const PodcastsModal: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
     backgroundColor: 'transparent',
   },
   backdrop: {
@@ -239,10 +243,15 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
-    height: '88%',
-    backgroundColor: Colors.surface,
+    height: IS_DESKTOP ? '84%' : '88%',
+    width: IS_DESKTOP ? 620 : '100%',
+    maxWidth: '92%',
+    borderRadius: IS_DESKTOP ? 24 : undefined,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderWidth: IS_DESKTOP ? 1 : 0,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: Colors.surface,
     overflow: 'hidden',
   },
   handle: {

@@ -10,14 +10,18 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useUiStore } from '../store/uiStore';
 import { useMusicStore } from '../store/musicStore';
 import { YouTubeService, type ImportedPlaylistResult } from '../services/youtubeService';
+import { MiniPlayer } from './MiniPlayer';
 import { Colors } from '../constants/theme';
 import type { Track } from '../models';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const AlbumDetailModal: React.FC = () => {
   const Colors = useThemeColors();
@@ -114,7 +118,7 @@ export const AlbumDetailModal: React.FC = () => {
                 {/* Album Cover & Info */}
                 <View style={styles.coverWrapper}>
                   {coverImage ? (
-                    <Image source={{ uri: coverImage }} style={styles.coverImage} contentFit="cover" />
+                    <Image source={{ uri: coverImage }} style={styles.coverImage} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <View style={styles.coverFallback}>
                       <Ionicons name="disc-outline" size={64} color={Colors.textMuted} />
@@ -204,9 +208,14 @@ export const AlbumDetailModal: React.FC = () => {
                 )}
               </View>
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, IS_DESKTOP && { paddingBottom: 116 }]}
             showsVerticalScrollIndicator={false}
           />
+        )}
+        {IS_DESKTOP && (
+          <View style={styles.desktopMiniDock} pointerEvents="box-none">
+            <MiniPlayer />
+          </View>
         )}
       </View>
     </Modal>
@@ -223,10 +232,17 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: IS_DESKTOP ? 16 : 50,
     paddingBottom: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: IS_DESKTOP ? 0 : 1,
     borderBottomColor: Colors.border,
+  },
+  desktopMiniDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
   },
   backBtn: {
     width: 40,

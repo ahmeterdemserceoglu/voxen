@@ -466,7 +466,7 @@ class VoxenPlaybackService : MediaSessionService() {
         queue = emptyList(); queueJson = "[]"; queueIndex = 0
         currentError = null
         changePlayer { player.stop(); player.clearMediaItems() }
-        prefs.edit().clear().apply()
+        prefs.edit().remove(KEY_QUEUE_JSON).remove(KEY_QUEUE_INDEX).remove(KEY_POSITION).remove("original_queue").apply()
         stopForeground(STOP_FOREGROUND_REMOVE)
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         VoxenWidgetProvider.updateAllWidgets(this, "voxen", "Müzik seç", null, false, 0L, 0L, 0, 0, false, "", "", "", "off", false)

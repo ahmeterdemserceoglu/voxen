@@ -11,7 +11,10 @@ import {
   PanResponder,
   Animated,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
+
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 import { Ionicons } from '@expo/vector-icons';
 import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
@@ -23,13 +26,13 @@ export const LyricsModal: React.FC = () => {
   const styles = useThemeStyles(createStyles);
   const { activeModal, closeModal } = useUiStore();
   const isOpen = activeModal === 'lyrics';
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = windowHeight * 0.78;
-  const fullHeight = windowHeight * 0.94;
+  const defaultHeight = IS_DESKTOP ? Math.min(720, windowHeight * 0.85) : windowHeight * 0.78;
+  const fullHeight = IS_DESKTOP ? Math.min(840, windowHeight * 0.92) : windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
   const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
@@ -178,11 +181,13 @@ export const LyricsModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.sheet, { height: heightAnim }]}>
+        <Animated.View style={[styles.sheet, IS_DESKTOP && styles.desktopSheet, { height: heightAnim }]}>
           {/* Top Drag Handle */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
-          </View>
+          {!IS_DESKTOP && (
+            <View {...panResponder.panHandlers} style={styles.topBar}>
+              <View style={styles.handle} />
+            </View>
+          )}
 
           {/* Header Bar */}
           <View style={styles.header}>
@@ -313,7 +318,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -325,6 +331,17 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     overflow: 'hidden',
+  },
+  desktopSheet: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
+    elevation: 20,
   },
   topBar: {
     paddingTop: 10,

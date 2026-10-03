@@ -25,8 +25,10 @@ import { useMusicStore } from '../store/musicStore';
 import { PlaylistCollageThumb } from './PlaylistCollageThumb';
 import { KeyboardAvoidModal } from './KeyboardAvoidModal';
 import { TrackItem } from '../services/youtubeService';
+import { MiniPlayer } from './MiniPlayer';
 import { Colors } from '../constants/theme';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const MAX_CONTENT_WIDTH = 760;
 const MAX_HERO_WIDTH = 680;
 
@@ -655,7 +657,7 @@ export const PlaylistDetailModal: React.FC = () => {
           style={[
             styles.topNav,
             {
-              paddingTop: insets.top + 8,
+              paddingTop: IS_DESKTOP ? 16 : insets.top + 8,
               paddingHorizontal: pageSidePadding,
             },
           ]}
@@ -666,7 +668,7 @@ export const PlaylistDetailModal: React.FC = () => {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             activeOpacity={0.72}
           >
-            <Ionicons name="chevron-down" size={23} color="#FFFFFF" />
+            <Ionicons name={IS_DESKTOP ? 'arrow-back' : 'chevron-down'} size={23} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.navCenter}>
@@ -696,7 +698,7 @@ export const PlaylistDetailModal: React.FC = () => {
           contentContainerStyle={[
             styles.listContent,
             {
-              paddingBottom: Math.max(insets.bottom, 12) + 96,
+              paddingBottom: Math.max(insets.bottom, 12) + (IS_DESKTOP ? 116 : 96),
               paddingHorizontal: pageSidePadding,
             },
           ]}
@@ -746,6 +748,12 @@ export const PlaylistDetailModal: React.FC = () => {
           }
         />
 
+        {IS_DESKTOP && (
+          <View style={styles.desktopMiniDock} pointerEvents="box-none">
+            <MiniPlayer />
+          </View>
+        )}
+
         {isMenuOpen && (
           <View style={styles.overlayLayer} pointerEvents="box-none">
             <TouchableOpacity
@@ -763,7 +771,7 @@ export const PlaylistDetailModal: React.FC = () => {
                 },
               ]}
             >
-              <View style={styles.menuHandle} />
+              {!IS_DESKTOP && <View style={styles.menuHandle} />}
 
               <View style={styles.sheetInner}>
                 <View style={styles.menuHeaderBox}>
@@ -1575,13 +1583,17 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   },
   menuSheet: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: IS_DESKTOP ? 'auto' : 0,
+    right: IS_DESKTOP ? 'auto' : 0,
+    width: IS_DESKTOP ? 440 : undefined,
+    alignSelf: IS_DESKTOP ? 'center' : undefined,
+    bottom: IS_DESKTOP ? 40 : 0,
+    borderRadius: IS_DESKTOP ? 24 : 0,
     paddingTop: 10,
     backgroundColor: '#121214',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: IS_DESKTOP ? 24 : 30,
+    borderTopRightRadius: IS_DESKTOP ? 24 : 30,
+    borderWidth: IS_DESKTOP ? 1 : 0,
     borderTopWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     shadowColor: '#000000',
@@ -1589,6 +1601,13 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     shadowOpacity: 0.42,
     shadowRadius: 26,
     elevation: 24,
+  },
+  desktopMiniDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
   },
   menuHandle: {
     width: 38,

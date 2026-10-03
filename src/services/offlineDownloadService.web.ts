@@ -53,9 +53,22 @@ class DesktopOfflineDownloadService {
       if (!response.ok) return [];
       const result = await response.json();
       if (!accountSession.isCurrent(epoch) || !Array.isArray(result.items)) return [];
-      return result.items.filter((item: any) => item.state === 'error' || item.state === 'cancelled').map((item: any) => {
-        this.set({ trackId: item.trackId, state: item.state, progress: 0, error: item.error }); return item.track;
-      }).filter((track: Track) => track?.id);
+      result.items.forEach((item: any) => {
+        if (item.trackId) {
+          this.set({
+            trackId: item.trackId,
+            state: item.state,
+            progress: item.progress || 0,
+            error: item.error,
+            track: item.track,
+            bytesDownloaded: item.bytesDownloaded,
+            totalBytes: item.totalBytes,
+            bytesPerSecond: item.bytesPerSecond,
+            remainingSeconds: item.remainingSeconds,
+          });
+        }
+      });
+      return result.items.filter((item: any) => item.state === 'error' || item.state === 'cancelled').map((item: any) => item.track).filter((track: Track) => track?.id);
     } catch { return []; }
   }
   async getStorageUsedBytes() { return (await this.getDownloadedTracks()).reduce((sum, item) => sum + (item.sizeBytes || 0), 0); }
@@ -63,14 +76,32 @@ class DesktopOfflineDownloadService {
     const existing = this.jobs.get(track.id); if (existing) return existing.promise;
     const owner = this.owner(); const epoch = accountSession.generation; const controller = new AbortController();
     const current = () => accountSession.isCurrent(epoch) && this.jobs.get(track.id)?.controller === controller;
-    const update = (progress: number) => { if (current() && !controller.signal.aborted) { this.set({ trackId: track.id, state: 'downloading', progress }); onProgress?.(progress); } };
+    const update = (entry: Partial<DownloadEntry>) => {
+      if (current() && !controller.signal.aborted) {
+        this.set({
+          trackId: track.id,
+          state: 'downloading',
+          progress: entry.progress ?? 0,
+          bytesDownloaded: entry.bytesDownloaded,
+          totalBytes: entry.totalBytes,
+          bytesPerSecond: entry.bytesPerSecond,
+          remainingSeconds: entry.remainingSeconds,
+          track,
+        });
+        onProgress?.(entry.progress ?? 0);
+      }
+    };
     let polling = false;
     const timer = setInterval(async () => {
       if (polling || !current() || controller.signal.aborted) return;
       polling = true;
       try {
         const response = await fetch(apiUrl(`/api/download/status?${this.query(owner)}`), { signal: controller.signal });
-        if (response.ok) { const result = await response.json(); const item = result.items?.find((entry: DownloadEntry) => entry.trackId === track.id); if (item?.state === 'downloading') update(item.progress); }
+        if (response.ok) {
+          const result = await response.json();
+          const item = result.items?.find((entry: DownloadEntry) => entry.trackId === track.id);
+          if (item?.state === 'downloading') update(item);
+        }
       } catch {} finally { polling = false; }
     }, 600);
     const promise = (async () => {
@@ -80,14 +111,14 @@ class DesktopOfflineDownloadService {
         const result = await response.json();
         if (!response.ok || !result.item) throw new Error(result.error || 'İndirme tamamlanamadı');
         if (!current() || controller.signal.aborted) return null;
-        this.cached = null; this.set({ trackId: track.id, state: 'done', progress: 100 }); onProgress?.(100);
+        this.cached = null; this.set({ trackId: track.id, state: 'done', progress: 100, track }); onProgress?.(100);
         return { ...result.item, localUri: absoluteLocalUri(result.item.localUri) };
       } catch (error) {
-        if (current()) this.set({ trackId: track.id, state: controller.signal.aborted ? 'cancelled' : 'error', progress: 0, error: controller.signal.aborted ? undefined : error instanceof Error ? error.message : 'İndirme hatası' });
+        if (current()) this.set({ trackId: track.id, state: controller.signal.aborted ? 'cancelled' : 'error', progress: 0, error: controller.signal.aborted ? undefined : error instanceof Error ? error.message : 'İndirme hatası', track });
         return null;
       } finally { clearInterval(timer); if (this.jobs.get(track.id)?.controller === controller) this.jobs.delete(track.id); }
     })();
-    this.jobs.set(track.id, { owner, controller, promise }); update(0); return promise;
+    this.jobs.set(track.id, { owner, controller, promise }); update({ progress: 0 }); return promise;
   }
   async downloadMany(tracks: Track[], onProgress?: (completed: number, total: number) => void) {
     const unique = [...new Map(tracks.filter(track => track?.id).map(track => [track.id, track])).values()];
@@ -111,9 +142,11 @@ class DesktopOfflineDownloadService {
   async deleteDownloadedTrack(trackId: string) {
     const owner = this.owner(); const epoch = accountSession.generation;
     this.jobs.get(trackId)?.controller.abort();
+    this.entries.delete(trackId);
+    this.listeners.forEach(listener => listener(trackId, 0));
     const response = await fetch(apiUrl(`/api/download?${this.query(owner, trackId)}`), { method: 'DELETE' });
     if (!response.ok) throw new Error('Parça silinemedi');
-    if (accountSession.isCurrent(epoch)) { this.cached = null; this.entries.delete(trackId); }
+    if (accountSession.isCurrent(epoch)) { this.cached = null; }
   }
   async clearDownloads() {
     const owner = this.owner(); const epoch = accountSession.generation;

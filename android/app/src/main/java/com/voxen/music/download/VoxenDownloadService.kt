@@ -30,9 +30,12 @@ class VoxenDownloadService : Service() {
         notify("İndirmeler hazırlanıyor", 0)
         val old = saved(this)
         old.keys().forEach { key -> old.optJSONObject(key)?.let { if (it.optString("state") in listOf("queued", "downloading")) enqueue(it) } }
+        if (jobs.isEmpty()) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, id: Int): Int {
-        intent?.getStringExtra("job")?.let { enqueue(JSONObject(it)) }
+        val jobStr = intent?.getStringExtra("job")
+        if (jobStr != null) { enqueue(JSONObject(jobStr)) }
+        else if (jobs.isEmpty()) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         return START_STICKY
     }
     private fun notify(title: String, progress: Int) {
@@ -80,7 +83,7 @@ class VoxenDownloadService : Service() {
                         }
                         try {
                             val code = connection.responseCode
-                            if (code == 416 && source.contentLengthBytes == offset && offset > 0) { require(part.renameTo(file)); metadata.delete(); last = null; break }
+                            if (code == 416 && source.contentLengthBytes == offset && offset > 0) { if (file.exists()) file.delete(); require(part.renameTo(file)); metadata.delete(); last = null; break }
                             require(code == 200 || code == 206) { "İndirme bağlantısı: HTTP $code" }
                             require(!Regex("text/|json|html", RegexOption.IGNORE_CASE).containsMatchIn(connection.contentType.orEmpty())) { "Geçersiz ses dosyası" }
                             if (code == 200) offset = 0L
@@ -99,6 +102,7 @@ class VoxenDownloadService : Service() {
                                 }
                             } }
                             require(received > 0 && (total <= 0 || received == total)) { "İndirme yarıda kaldı" }
+                            if (file.exists()) file.delete()
                             require(part.renameTo(file)) { "Dosya kaydedilemedi" }
                             metadata.delete(); last = null; break
                         } finally { connection.disconnect(); connections.remove(key, connection) }

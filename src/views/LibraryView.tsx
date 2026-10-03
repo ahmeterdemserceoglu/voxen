@@ -80,9 +80,18 @@ export const LibraryView: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
-    offlineDownloadService.getDownloadedTracks().then((items) => {
-      setDownloadedTracks(items.map((i) => i.track));
+    const refreshDownloads = () => {
+      offlineDownloadService.getDownloadedTracks().then((items) => {
+        setDownloadedTracks(items.map((i) => i.track));
+      });
+    };
+    refreshDownloads();
+    const unsub = offlineDownloadService.addProgressListener((_id, progress) => {
+      if (progress >= 100 || progress === 0) {
+        refreshDownloads();
+      }
     });
+    return () => unsub();
   }, [activeSubTab]);
 
   const {
@@ -248,6 +257,7 @@ export const LibraryView: React.FC = () => {
         index={index}
         isCurrent={isThisPlaying}
         isPlaying={isPlaying}
+        isDownloaded={activeSubTab === 'downloads'}
         onPress={() => playTrack(item, currentList)}
         onMorePress={() => openActionSheet(item)}
       />
@@ -294,6 +304,51 @@ export const LibraryView: React.FC = () => {
         </View>
         <Text style={styles.gridCardSub} numberOfLines={1}>
           Çalma Listesi • {favorites.length} parça
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // Downloaded Songs item representation in grid
+  const renderDownloadedSongsGridCard = () => (
+    <TouchableOpacity
+      key="downloaded-songs-grid"
+      style={[styles.gridCard, { width: CARD_WIDTH }]}
+      activeOpacity={0.82}
+      onPress={() => setActiveSubTab('downloads')}
+    >
+      <View style={[styles.gridThumbContainer, { width: CARD_WIDTH, height: CARD_WIDTH }]}>
+        <LinearGradient
+          colors={['#7E1D2D', '#D61A24']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.likedSongsGradient}
+        >
+          <Ionicons name="arrow-down-circle" size={CARD_WIDTH * 0.35} color="#FFFFFF" />
+          {downloadedTracks.length > 0 && (
+            <TouchableOpacity
+              style={[styles.gridPlayFloatingBtn, { backgroundColor: Colors.primary }]}
+              activeOpacity={0.85}
+              onPress={(e) => {
+                e.stopPropagation();
+                playTrack(downloadedTracks[0], downloadedTracks);
+              }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="play" size={18} color="#FFFFFF" style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          )}
+        </LinearGradient>
+      </View>
+      <View style={styles.gridMeta}>
+        <View style={styles.pinnedRow}>
+          <Ionicons name="pin" size={11} color={Colors.primary} style={{ marginRight: 4 }} />
+          <Text style={styles.gridCardTitle} numberOfLines={1}>
+            İndirilenler
+          </Text>
+        </View>
+        <Text style={styles.gridCardSub} numberOfLines={1}>
+          Çalma Listesi • {downloadedTracks.length} parça
         </Text>
       </View>
     </TouchableOpacity>
@@ -396,6 +451,44 @@ export const LibraryView: React.FC = () => {
       </TouchableOpacity>
     );
   };
+
+  // Downloaded Songs row in list mode
+  const renderDownloadedSongsListRow = () => (
+    <TouchableOpacity
+      key="downloaded-songs-list"
+      style={styles.listRow}
+      activeOpacity={0.75}
+      onPress={() => setActiveSubTab('downloads')}
+    >
+      <LinearGradient
+        colors={['#7E1D2D', '#D61A24']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.listRowThumb}
+      >
+        <Ionicons name="arrow-down-circle" size={26} color="#FFFFFF" />
+      </LinearGradient>
+      <View style={styles.listRowMeta}>
+        <Text style={styles.listRowTitle}>İndirilenler</Text>
+        <Text style={styles.listRowSub}>
+          Çalma Listesi • {downloadedTracks.length} parça • Sabitlendi
+        </Text>
+      </View>
+      {downloadedTracks.length > 0 && (
+        <TouchableOpacity
+          style={[styles.listPlayBtn, { backgroundColor: 'rgba(229, 9, 20, 0.15)' }]}
+          activeOpacity={0.8}
+          onPress={(e) => {
+            e.stopPropagation();
+            playTrack(downloadedTracks[0], downloadedTracks);
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="play" size={16} color={Colors.primary} style={{ marginLeft: 2 }} />
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[styles.container, { paddingTop: IS_DESKTOP ? 30 : (insets.top || 16) + 8 }]}>
@@ -577,10 +670,13 @@ export const LibraryView: React.FC = () => {
                 {/* 1. Liked Songs Card */}
                 {renderLikedSongsGridCard()}
 
-                {/* 2. Add New Playlist Card */}
+                {/* 2. Downloaded Songs Card */}
+                {renderDownloadedSongsGridCard()}
+
+                {/* 3. Add New Playlist Card */}
                 {renderAddPlaylistGridCard()}
 
-                {/* 3. User Playlists */}
+                {/* 4. User Playlists */}
                 {filteredPlaylists.map((p) => renderPlaylistGridCard(p))}
               </View>
             ) : (
@@ -614,6 +710,9 @@ export const LibraryView: React.FC = () => {
                     </TouchableOpacity>
                   )}
                 </TouchableOpacity>
+
+                {/* Downloaded songs list row */}
+                {renderDownloadedSongsListRow()}
 
                 {/* User playlists rows */}
                 {filteredPlaylists.map((p) => renderPlaylistListRow(p))}
@@ -679,51 +778,103 @@ export const LibraryView: React.FC = () => {
           </View>
         )}
 
-        {activeSubTab === 'downloads' && <DownloadStoragePanel onTracksChanged={setDownloadedTracks} />}
         {/* TAB: DOWNLOADS */}
         {activeSubTab === 'downloads' && (
           <View style={{ flex: 1 }}>
             {filteredDownloads.length > 0 ? (
-              <>
-                <View style={styles.subtabHeroBar}>
-                  <View>
-                    <Text style={styles.subtabHeroTitle}>İndirilen Şarkılar</Text>
-                    <Text style={styles.subtabHeroCount}>{filteredDownloads.length} parça indirildi</Text>
+              <FlatList
+                data={filteredDownloads}
+                keyExtractor={(item) => item.id}
+                renderItem={renderTrackItem}
+                ListHeaderComponent={
+                  <>
+                    <View style={styles.downloadsHeroContainer}>
+                      <View style={styles.downloadsHeroCard}>
+                        <LinearGradient
+                          colors={['#450A0A', '#7E1D2D', '#D61A24']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.downloadsCoverArt}
+                        >
+                          <Ionicons name="arrow-down-circle" size={44} color="#FFFFFF" />
+                        </LinearGradient>
+                        <View style={styles.downloadsHeroInfo}>
+                          <Text style={styles.downloadsHeroTitle}>İndirilen Şarkılar</Text>
+                          <Text style={styles.downloadsHeroSub}>
+                            Voxen Kitaplığı • {filteredDownloads.length} şarkı
+                          </Text>
+                          <View style={styles.downloadsOfflineBadge}>
+                            <Ionicons name="checkmark-circle" size={14} color={Colors.primary} />
+                            <Text style={[styles.downloadsOfflineBadgeText, { color: Colors.primary }]}>Çevrimdışı Dinlemeye Hazır</Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={styles.downloadsActionsRow}>
+                        <View style={styles.downloadsLeftActions}>
+                          <TouchableOpacity
+                            style={styles.shuffleCircleBtn}
+                            activeOpacity={0.8}
+                            onPress={() => playShuffled(filteredDownloads)}
+                          >
+                            <Ionicons name="shuffle" size={20} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.voxenPlayBtn}
+                          activeOpacity={0.85}
+                          onPress={() => playTrack(filteredDownloads[0], filteredDownloads)}
+                        >
+                          <Ionicons name="play" size={24} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <DownloadStoragePanel onTracksChanged={setDownloadedTracks} />
+                  </>
+                }
+                contentContainerStyle={styles.scrollPadding}
+                showsVerticalScrollIndicator={false}
+              />
+            ) : (
+              <ScrollView contentContainerStyle={styles.scrollPadding} showsVerticalScrollIndicator={false}>
+                <View style={styles.downloadsHeroContainer}>
+                  <View style={styles.downloadsHeroCard}>
+                    <LinearGradient
+                      colors={['#450A0A', '#7E1D2D', '#D61A24']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.downloadsCoverArt}
+                    >
+                      <Ionicons name="arrow-down-circle" size={44} color="#FFFFFF" />
+                    </LinearGradient>
+                    <View style={styles.downloadsHeroInfo}>
+                      <Text style={styles.downloadsHeroTitle}>İndirilen Şarkılar</Text>
+                      <Text style={styles.downloadsHeroSub}>0 şarkı indirildi</Text>
+                      <View style={styles.downloadsOfflineBadge}>
+                        <Ionicons name="cloud-offline-outline" size={14} color={Colors.primary} />
+                        <Text style={[styles.downloadsOfflineBadgeText, { color: Colors.primary }]}>Çevrimdışı Mod</Text>
+                      </View>
+                    </View>
                   </View>
+                </View>
+                <DownloadStoragePanel onTracksChanged={setDownloadedTracks} />
+                <View style={styles.emptyWrap}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: 'rgba(229, 9, 20, 0.12)' }]}>
+                    <Ionicons name="cloud-offline-outline" size={42} color={Colors.primary} />
+                  </View>
+                  <Text style={styles.emptyTitle}>Henüz İndirilen Parça Yok</Text>
+                  <Text style={styles.emptySub}>
+                    Şarkıların yanındaki seçeneklerden (üç nokta) 'Çevrimdışı İndir' butonuna basarak internet olmadan dinleyebilirsin.
+                  </Text>
                   <TouchableOpacity
-                    style={styles.playAllCircleBtn}
+                    style={[styles.emptyCtaBtn, { backgroundColor: Colors.primary }]}
                     activeOpacity={0.85}
-                    onPress={() => playTrack(filteredDownloads[0], filteredDownloads)}
+                    onPress={() => setActiveTab('search')}
                   >
-                    <Ionicons name="play" size={22} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                    <Text style={[styles.emptyCtaBtnText, { color: '#FFFFFF' }]}>Şarkı Bul ve İndir</Text>
                   </TouchableOpacity>
                 </View>
-
-                <FlatList
-                  data={filteredDownloads}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderTrackItem}
-                  contentContainerStyle={styles.scrollPadding}
-                  showsVerticalScrollIndicator={false}
-                />
-              </>
-            ) : (
-              <View style={styles.emptyWrap}>
-                <View style={styles.emptyIconCircle}>
-                  <Ionicons name="cloud-offline-outline" size={42} color={Colors.primary} />
-                </View>
-                <Text style={styles.emptyTitle}>Henüz İndirilen Parça Yok</Text>
-                <Text style={styles.emptySub}>
-                  Şarkıların yanındaki seçeneklerden (üç nokta) 'Çevrimdışı İndir' butonuna basarak internet olmadan dinleyebilirsin.
-                </Text>
-                <TouchableOpacity
-                  style={styles.emptyCtaBtn}
-                  activeOpacity={0.85}
-                  onPress={() => setActiveTab('search')}
-                >
-                  <Text style={styles.emptyCtaBtnText}>Şarkı Bul ve İndir</Text>
-                </TouchableOpacity>
-              </View>
+              </ScrollView>
             )}
           </View>
         )}
@@ -1343,6 +1494,80 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 4,
+  },
+  downloadsHeroContainer: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingTop: 8,
+    paddingBottom: 14,
+  },
+  downloadsHeroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 14,
+  },
+  downloadsCoverArt: {
+    width: 84,
+    height: 84,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  downloadsHeroInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  downloadsHeroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+  },
+  downloadsHeroSub: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  downloadsOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  downloadsOfflineBadgeText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  downloadsActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  downloadsLeftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  voxenPlayBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
   },
   clearTextBtn: {
     flexDirection: 'row',

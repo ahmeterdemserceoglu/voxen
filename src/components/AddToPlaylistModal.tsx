@@ -23,11 +23,13 @@ import { useMusicStore, Playlist } from '../store/musicStore';
 import { PlaylistCollageThumb } from './PlaylistCollageThumb';
 import { Colors } from '../constants/theme';
 
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+
 export const AddToPlaylistModal: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const {
     isAddToPlaylistOpen,
     addToPlaylistSong,
@@ -60,8 +62,8 @@ export const AddToPlaylistModal: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
-  const defaultHeight = windowHeight * 0.72;
-  const fullHeight = windowHeight * 0.94;
+  const defaultHeight = IS_DESKTOP ? Math.min(620, windowHeight * 0.8) : windowHeight * 0.72;
+  const fullHeight = IS_DESKTOP ? Math.min(740, windowHeight * 0.9) : windowHeight * 0.94;
   const heightAnim = useRef(new Animated.Value(defaultHeight)).current;
   const toggleFullScreenRef = useRef<(toFull: boolean) => void>(() => {});
 
@@ -154,6 +156,7 @@ export const AddToPlaylistModal: React.FC = () => {
         <Animated.View
           style={[
             styles.modalCard,
+            IS_DESKTOP && styles.desktopModalCard,
             {
               height: heightAnim,
               paddingBottom: (insets.bottom || 16) + 16,
@@ -162,7 +165,7 @@ export const AddToPlaylistModal: React.FC = () => {
         >
           {/* Top Drag & Header Area */}
           <View {...panResponder.panHandlers} style={styles.topBar}>
-            <View style={styles.handle} />
+            {!IS_DESKTOP && <View style={styles.handle} />}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <Text style={styles.title}>Çalma Listesine Ekle</Text>
@@ -170,6 +173,13 @@ export const AddToPlaylistModal: React.FC = () => {
                   {addToPlaylistSong.title} • {addToPlaylistSong.artist}
                 </Text>
               </View>
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={closeAddToPlaylist}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -285,7 +295,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
   },
   backdropTouch: {
     ...StyleSheet.absoluteFill,
@@ -297,6 +308,19 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  desktopModalCard: {
+    width: 560,
+    borderRadius: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
+    elevation: 20,
   },
   topBar: {
     paddingTop: 12,

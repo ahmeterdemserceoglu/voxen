@@ -78,11 +78,11 @@ export interface ArtistProfileDetails {
   similarArtists?: SimilarArtistItem[];
 }
 
-const IS_LINUX_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
-const DESKTOP_API_ORIGIN = IS_LINUX_DESKTOP ? (process.env.EXPO_PUBLIC_VOXEN_API_BASE || '') : '';
-const YTM_BASE = IS_LINUX_DESKTOP ? `${DESKTOP_API_ORIGIN}/api/youtubei/v1` : 'https://music.youtube.com/youtubei/v1';
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
+const DESKTOP_API_ORIGIN = IS_DESKTOP ? (process.env.EXPO_PUBLIC_VOXEN_API_BASE || '') : '';
+const YTM_BASE = IS_DESKTOP ? `${DESKTOP_API_ORIGIN}/api/youtubei/v1` : 'https://music.youtube.com/youtubei/v1';
 
-const DEFAULT_HEADERS: Record<string, string> = IS_LINUX_DESKTOP ? {
+const DEFAULT_HEADERS: Record<string, string> = IS_DESKTOP ? {
   'Content-Type': 'application/json',
 } : {
   'Content-Type': 'application/json',
@@ -925,11 +925,11 @@ export class YouTubeService {
       }
     }
 
-    if (IS_LINUX_DESKTOP) {
+    if (IS_DESKTOP) {
       const response = await fetch(`${DESKTOP_API_ORIGIN}/api/stream/resolve?id=${encodeURIComponent(videoId)}`);
       const result = await response.json().catch(() => null);
       if (!response.ok || !result?.uri) {
-        throw new Error(result?.error || 'Linux ses akışı çözülemedi');
+        throw new Error(result?.error || 'Masaüstü ses akışı çözülemedi');
       }
       return {
         ...result,
@@ -938,11 +938,10 @@ export class YouTubeService {
     }
 
     try {
-      // 1. Direct Piped / Invidious CDN API (100% ad-free raw audio)
+      // 1. Direct Piped / Invidious CDN API (100% ad-free raw audio fallback)
       const pipedInstances = [
-        'https://pipedapi.kavin.rocks',
+        'https://pipedapi.drgns.space',
         'https://api.piped.privacydev.net',
-        'https://pipedapi.tokhmi.xyz',
       ];
 
       for (const inst of pipedInstances) {
@@ -963,13 +962,24 @@ export class YouTubeService {
       }
 
       // 2. Direct Invidious fallback
-      const invidiousRes = await fetch(`https://inv.tux.pizza/api/v1/videos/${videoId}`, { signal: AbortSignal.timeout(3000) });
-      if (invidiousRes.ok) {
-        const invData = await invidiousRes.json();
-        const adaptive = invData.adaptiveFormats?.filter((f: any) => f.type?.startsWith('audio/')) || [];
-        if (adaptive.length > 0) {
-          const best = adaptive.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-          if (best?.url) return { uri: best.url, bitrate: best.bitrate };
+      const invidiousInstances = [
+        'https://inv.nadeko.net',
+        'https://invidious.nerdvpn.de',
+        'https://inv.tux.pizza',
+      ];
+      for (const inst of invidiousInstances) {
+        try {
+          const invidiousRes = await fetch(`${inst}/api/v1/videos/${videoId}`, { signal: AbortSignal.timeout(3000) });
+          if (invidiousRes.ok) {
+            const invData = await invidiousRes.json();
+            const adaptive = invData.adaptiveFormats?.filter((f: any) => f.type?.startsWith('audio/')) || [];
+            if (adaptive.length > 0) {
+              const best = adaptive.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+              if (best?.url) return { uri: best.url, bitrate: best.bitrate };
+            }
+          }
+        } catch {
+          continue;
         }
       }
     } catch (err) {

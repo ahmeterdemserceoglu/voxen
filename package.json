@@ -1,6 +1,6 @@
 {
   "name": "voxen",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -39,8 +39,6 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "linux:build": "./linux-player/build-deb.sh",
-    "linux:serve": "EXPO_PUBLIC_VOXEN_DESKTOP=1 expo export --platform web --output-dir dist-linux && ./linux-player/voxen-player-dev",
     "windows:export": "cross-env EXPO_PUBLIC_VOXEN_DESKTOP=1 expo export --platform web --output-dir dist-windows",
     "windows:build": "npm run windows:export && npm --prefix windows-player run build:windows",
     "postinstall": "node scripts/android-agp9-compat.cjs"

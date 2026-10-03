@@ -11,6 +11,7 @@ interface TrackRowProps {
   index?: number;
   isCurrent?: boolean;
   isPlaying?: boolean;
+  isDownloaded?: boolean;
   onPress: () => void;
   onMorePress?: () => void;
   onArtworkError?: () => void;
@@ -21,6 +22,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   index,
   isCurrent,
   isPlaying,
+  isDownloaded,
   onPress,
   onMorePress,
   onArtworkError,
@@ -55,9 +57,14 @@ export const TrackRow: React.FC<TrackRowProps> = ({
             {track.title}
           </Text>
         </View>
-        <Text style={styles.artist} numberOfLines={1}>
-          {artist}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+          {isDownloaded && (
+            <Ionicons name="arrow-down-circle" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
+          )}
+          <Text style={styles.artist} numberOfLines={1}>
+            {artist}
+          </Text>
+        </View>
       </View>
 
       {track.durationFormatted && (

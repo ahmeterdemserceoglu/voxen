@@ -72,7 +72,17 @@ function rememberPending(owner, track, state, error) {
 }
 function downloadStatus(owner) {
   const items = new Map(readPending(owner).map(item => [item.track.id, { ...item, trackId: item.track.id, state: item.state === 'downloading' ? 'cancelled' : item.state, progress: 0 }]));
-  for (const job of downloadJobs.values()) if (job.owner === owner) items.set(job.track.id, { track: job.track, trackId: job.track.id, state: job.state, progress: job.progress, error: job.error });
+  for (const job of downloadJobs.values()) if (job.owner === owner) items.set(job.track.id, {
+    track: job.track,
+    trackId: job.track.id,
+    state: job.state,
+    progress: job.progress,
+    error: job.error,
+    bytesDownloaded: job.bytesDownloaded,
+    totalBytes: job.totalBytes,
+    bytesPerSecond: job.bytesPerSecond,
+    remainingSeconds: job.remainingSeconds,
+  });
   return [...items.values()];
 }
 function publicDownload(item, owner) {
@@ -232,38 +242,26 @@ async function proxyAudio(req, res, targetUrl, mime, videoId) {
   try { target = new URL(targetUrl); } catch { return json(res, 400, { error: 'Geçersiz akış adresi' }); }
   if (!target.hostname.endsWith('.googlevideo.com')) return json(res, 403, { error: 'Bu akış alanına izin verilmiyor' });
   const headers = { 'User-Agent': USER_AGENT, Accept: req.headers.accept || '*/*' };
-  const contentLength = Number(target.searchParams.get('clen'));
-  const requested = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
-  const start = requested ? Number(requested[1] || 0) : 0;
-  const end = requested ? Math.min(Number(requested[2] || contentLength - 1), contentLength - 1) : contentLength - 1;
-  if (contentLength > 0 && end >= start && end - start + 1 > 65_536) {
-    res.writeHead(requested ? 206 : 200, {
-      'Content-Type': mime || 'audio/webm',
-      'Content-Length': end - start + 1,
-      ...(requested ? { 'Content-Range': `bytes ${start}-${end}/${contentLength}` } : {}),
-      'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=300', 'Access-Control-Allow-Origin': '*',
-    });
-    let activeTarget = target;
-    for (let cursor = start; cursor <= end && !res.destroyed; cursor += 65_536) {
-      const chunkEnd = Math.min(cursor + 65_535, end);
-      let buffer; let lastError;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const chunk = await fetch(activeTarget, { headers: { ...headers, Range: `bytes=${cursor}-${chunkEnd}` }, signal: AbortSignal.timeout(30_000) });
-          if (chunk.status !== 206) throw new Error(`Ses parçası yanıtı: ${chunk.status}`);
-          buffer = Buffer.from(await chunk.arrayBuffer()); break;
-        } catch (error) {
-          lastError = error;
-          if (videoId) { const refreshed = await resolveAudio(videoId, true); activeTarget = new URL(refreshed.url); }
-        }
-      }
-      if (!buffer) throw lastError || new Error('Ses parçası alınamadı');
-      if (!res.write(buffer)) await once(res, 'drain');
-    }
-    return res.end();
-  }
   if (req.headers.range) headers.Range = req.headers.range;
-  const upstream = await fetch(target, { method: req.method, headers, signal: AbortSignal.timeout(30_000) });
+
+  let activeTarget = target;
+  let upstream;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      upstream = await fetch(activeTarget, { method: req.method, headers, signal: AbortSignal.timeout(30_000) });
+      if ((upstream.status === 403 || upstream.status === 410) && videoId && attempt === 0) {
+        const refreshed = await resolveAudio(videoId, true);
+        activeTarget = new URL(refreshed.url);
+        continue;
+      }
+      break;
+    } catch (err) {
+      if (attempt === 1) throw err;
+    }
+  }
+
+  if (!upstream) return json(res, 502, { error: 'Ses akışına bağlanılamadı' });
+
   const output = {
     'Content-Type': upstream.headers.get('content-type') || mime || 'audio/webm',
     'Accept-Ranges': upstream.headers.get('accept-ranges') || 'bytes',
@@ -295,33 +293,63 @@ async function downloadTrack(req, res, dependencies = {}) {
   const disconnected = () => { if (!res.writableEnded) controller.abort(); };
   res.on('close', disconnected);
   try {
-  const stream = await (dependencies.resolveAudio || resolveAudio)(track.videoId || track.id);
-  controller.signal.throwIfAborted();
-  const extension = /mp4|m4a/i.test(stream.mime) ? 'm4a' : 'webm';
-  const directory = ownerDirectory(owner); fs.mkdirSync(directory, { recursive: true });
-  const filePath = path.join(directory, `${safePart(track.id, 'track')}.${extension}`);
-  temporary = `${filePath}.${randomUUID()}.part`;
-  const localStream = new URL(`http://127.0.0.1:${server.address()?.port || PORT}/api/audio`);
-  localStream.searchParams.set('id', track.videoId || track.id); localStream.searchParams.set('url', stream.url); localStream.searchParams.set('mime', stream.mime);
-  const upstream = await (dependencies.fetch || fetch)(localStream, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]) });
-  if (!upstream.ok || !upstream.body) throw new Error(`Ses indirme yanıtı: ${upstream.status}`);
-  if (/text\/|json|html/i.test(upstream.headers.get('content-type') || '')) throw new Error('Geçersiz ses dosyası');
-  const total = Number(upstream.headers.get('content-length')) || 0;
-  let received = 0;
-  const progress = new Transform({ transform(chunk, _encoding, callback) {
-    received += chunk.length;
-    job.progress = total > 0 ? Math.min(99, Math.floor(received * 100 / total)) : 5;
-    callback(null, chunk);
-  } });
-  await pipeline(Readable.fromWeb(upstream.body), progress, fs.createWriteStream(temporary), { signal: controller.signal });
-  controller.signal.throwIfAborted();
-  if (!received || (total > 0 && total !== received)) throw new Error('Ses dosyası eksik indirildi');
-  fs.renameSync(temporary, filePath);
-  const item = { track, filePath, localUri: '', downloadedAt: Date.now(), sizeBytes: fs.statSync(filePath).size };
-  writeDownloads(owner, [...readDownloads(owner).filter(entry => entry.track.id !== track.id), item]);
-  job.state = 'done'; job.progress = 100;
-  rememberPending(owner, track, 'done');
-  return json(res, 200, { item: publicDownload(item, owner), cached: false });
+    const stream = await (dependencies.resolveAudio || resolveAudio)(track.videoId || track.id);
+    controller.signal.throwIfAborted();
+    const extension = /mp4|m4a/i.test(stream.mime) ? 'm4a' : 'webm';
+    const directory = ownerDirectory(owner); fs.mkdirSync(directory, { recursive: true });
+    const filePath = path.join(directory, `${safePart(track.id, 'track')}.${extension}`);
+    temporary = `${filePath}.${randomUUID()}.part`;
+
+    let activeUrl = stream.url;
+    let upstream = await (dependencies.fetch || fetch)(activeUrl, {
+      headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]),
+    });
+    if ((upstream.status === 403 || upstream.status === 410) && (track.videoId || track.id)) {
+      const refreshed = await (dependencies.resolveAudio || resolveAudio)(track.videoId || track.id, true);
+      activeUrl = refreshed.url;
+      upstream = await (dependencies.fetch || fetch)(activeUrl, {
+        headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]),
+      });
+    }
+
+    if (!upstream.ok || !upstream.body) throw new Error(`Ses indirme yanıtı: ${upstream.status}`);
+    if (/text\/|json|html/i.test(upstream.headers.get('content-type') || '')) throw new Error('Geçersiz ses dosyası');
+    const total = Number(upstream.headers.get('content-length')) || 0;
+    let received = 0;
+    let lastTime = Date.now();
+    let lastBytes = 0;
+    job.totalBytes = total;
+    job.bytesDownloaded = 0;
+    job.bytesPerSecond = 0;
+    job.remainingSeconds = 0;
+    const progress = new Transform({ transform(chunk, _encoding, callback) {
+      received += chunk.length;
+      job.bytesDownloaded = received;
+      job.progress = total > 0 ? Math.min(99, Math.floor(received * 100 / total)) : 5;
+      const now = Date.now();
+      const elapsed = (now - lastTime) / 1000;
+      if (elapsed >= 0.4) {
+        const bps = (received - lastBytes) / elapsed;
+        job.bytesPerSecond = Math.max(0, bps);
+        if (bps > 0 && total > received) {
+          job.remainingSeconds = Math.max(0, (total - received) / bps);
+        }
+        lastTime = now;
+        lastBytes = received;
+      }
+      callback(null, chunk);
+    } });
+    await pipeline(Readable.fromWeb(upstream.body), progress, fs.createWriteStream(temporary), { signal: controller.signal });
+    controller.signal.throwIfAborted();
+    if (!received || (total > 0 && total !== received)) throw new Error('Ses dosyası eksik indirildi');
+    fs.renameSync(temporary, filePath);
+    const item = { track, filePath, localUri: '', downloadedAt: Date.now(), sizeBytes: fs.statSync(filePath).size };
+    writeDownloads(owner, [...readDownloads(owner).filter(entry => entry.track.id !== track.id), item]);
+    job.state = 'done'; job.progress = 100;
+    rememberPending(owner, track, 'done');
+    return json(res, 200, { item: publicDownload(item, owner), cached: false });
   } catch (error) {
     job.state = controller.signal.aborted ? 'cancelled' : 'error';
     job.error = controller.signal.aborted ? undefined : error.message;

@@ -283,6 +283,7 @@ export const HomeView: React.FC = () => {
                                 onError={() => hideArtwork(item.id)}
                                 style={styles.thumb}
                                 contentFit="cover"
+                                cachePolicy="memory-disk"
                                 transition={150}
                               />
                               {isThisPlaying && (
@@ -350,29 +351,39 @@ export const HomeView: React.FC = () => {
                   style={styles.heroCard}
                   activeOpacity={0.9}
                   onPress={() => playTrack(dailyDiscoverTrack, quickPicks)}
-                  >
-                    <Image
+                >
+                  <Image
                     source={{ uri: trackArtwork(dailyDiscoverTrack, true) }}
-                    style={[styles.heroBg, IS_DESKTOP && styles.desktopHeroArtwork]}
+                    style={styles.heroBg}
                     onError={() => hideArtwork(dailyDiscoverTrack.id)}
                     contentFit="cover"
+                    cachePolicy="memory-disk"
                   />
                   <LinearGradient
-                    colors={IS_DESKTOP ? ['#17171C', 'rgba(23,23,28,0.92)', 'rgba(23,23,28,0.04)'] : ['rgba(0,0,0,0.2)', 'rgba(11,11,11,0.75)', '#0B0B0B']}
+                    colors={IS_DESKTOP
+                      ? ['#0D0D11', 'rgba(13, 13, 17, 0.92)', 'rgba(13, 13, 17, 0.55)', 'rgba(13, 13, 17, 0.10)']
+                      : ['rgba(0,0,0,0.2)', 'rgba(11,11,11,0.75)', '#0B0B0B']
+                    }
                     start={IS_DESKTOP ? { x: 0, y: 0 } : undefined}
-                    end={IS_DESKTOP ? { x: 1, y: 0 } : undefined}
+                    end={IS_DESKTOP ? { x: 0.70, y: 0 } : undefined}
                     style={StyleSheet.absoluteFill}
                   />
-                  <View style={styles.heroContent}>
-                    <Text style={styles.heroTitle} numberOfLines={1}>
+                  <View style={[styles.heroContent, IS_DESKTOP && styles.desktopHeroContent]}>
+                    {IS_DESKTOP && (
+                      <View style={styles.heroBadge}>
+                        <Ionicons name="sparkles" size={13} color={Colors.primary} />
+                        <Text style={styles.heroBadgeText}>ÖNE ÇIKAN KEŞİF</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.heroTitle, IS_DESKTOP && styles.desktopHeroTitle]} numberOfLines={1}>
                       {dailyDiscoverTrack.title}
                     </Text>
-                    <Text style={styles.heroArtist} numberOfLines={1}>
+                    <Text style={[styles.heroArtist, IS_DESKTOP && styles.desktopHeroArtist]} numberOfLines={1}>
                       {dailyDiscoverTrack.artist}
                     </Text>
-                    <View style={styles.heroPlayBtn}>
-                      <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />
-                      <Text style={styles.heroPlayText}>Şimdi Dinle</Text>
+                    <View style={[styles.heroPlayBtn, IS_DESKTOP && styles.desktopHeroPlayBtn]}>
+                      <Ionicons name="play" size={IS_DESKTOP ? 18 : 16} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                      <Text style={[styles.heroPlayText, IS_DESKTOP && styles.desktopHeroPlayText]}>Şimdi Dinle</Text>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -398,7 +409,7 @@ export const HomeView: React.FC = () => {
                         const active = currentTrack?.id === track.id;
                         return (
                           <TouchableOpacity key={track.id} style={[styles.recentCard, active && styles.recentCardActive]} activeOpacity={0.82} onPress={() => playTrack(track, recentTracks)}>
-                            <Image source={{ uri: trackArtwork(track) }} onError={() => hideArtwork(track.id)} style={styles.recentCover} contentFit="cover" />
+                            <Image source={{ uri: trackArtwork(track) }} onError={() => hideArtwork(track.id)} style={styles.recentCover} contentFit="cover" cachePolicy="memory-disk" />
                             <View style={styles.recentMeta}>
                               <Text style={[styles.recentTitle, active && styles.recentTitleActive]} numberOfLines={1}>{track.title}</Text>
                               <Text style={styles.recentArtist} numberOfLines={1}>{track.artist || track.artistName}</Text>
@@ -441,7 +452,7 @@ export const HomeView: React.FC = () => {
                         activeOpacity={0.88}
                         onPress={() => handleOpenMix(mix)}
                       >
-                        {mixThumb ? <Image source={{ uri: mixThumb }} onError={() => hideArtwork(mix.id)} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                        {mixThumb ? <Image source={{ uri: mixThumb }} onError={() => hideArtwork(mix.id)} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
                         <LinearGradient
                           colors={['rgba(0,0,0,0.06)', 'rgba(0,0,0,0.48)', idx === 0 ? 'rgba(120,4,12,0.96)' : 'rgba(10,10,14,0.98)']}
                           locations={[0, 0.48, 1]}
@@ -567,6 +578,7 @@ export const HomeView: React.FC = () => {
                             onError={() => hideArtwork(item.id)}
                             style={styles.cardCover}
                             contentFit="cover"
+                            cachePolicy="memory-disk"
                             transition={150}
                           />
                           {isThisPlaying && (
@@ -829,8 +841,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     padding: 6,
   },
   heroCard: {
-    height: IS_DESKTOP ? 250 : 185,
-    borderRadius: 20,
+    height: IS_DESKTOP ? 280 : 185,
+    borderRadius: IS_DESKTOP ? 24 : 20,
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 1,
@@ -840,23 +852,57 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  desktopHeroArtwork: { position: 'absolute', right: 0, top: 0, width: '48%', height: '100%' },
   heroContent: {
     position: 'absolute',
     bottom: 14,
     left: 16,
     right: 16,
   },
+  desktopHeroContent: {
+    left: 36,
+    bottom: 32,
+    right: 'auto',
+    maxWidth: 580,
+  },
+  heroBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(229, 9, 20, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.36)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+  },
+  heroBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.primary,
+    letterSpacing: 0.8,
+  },
   heroTitle: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+  desktopHeroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   heroArtist: {
     color: Colors.textMuted,
     fontSize: 13,
     marginTop: 2,
     marginBottom: 10,
+  },
+  desktopHeroArtist: {
+    fontSize: 15,
+    marginTop: 4,
+    marginBottom: 16,
   },
   heroPlayBtn: {
     flexDirection: 'row',
@@ -873,10 +919,18 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  desktopHeroPlayBtn: {
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 22,
+  },
   heroPlayText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  desktopHeroPlayText: {
+    fontSize: 14,
   },
   horizontalRow: {
     gap: 14,

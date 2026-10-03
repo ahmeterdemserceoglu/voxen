@@ -47,6 +47,7 @@ const SPACE_AVATARS = [
   // Lunar Eclipse & Space Horizon
   'https://images.unsplash.com/photo-1532693322450-2cb5c511067d?w=300&h=300&fit=crop',
 ];
+const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
 export const EditProfileModal: React.FC = () => {
   const Colors = useThemeColors();
@@ -285,11 +286,11 @@ export const EditProfileModal: React.FC = () => {
           activeOpacity={1}
           onPress={closeModal}
         />
-        <Animated.View style={[styles.container, { height: heightAnim }]}>
+        <Animated.View style={[styles.container, IS_DESKTOP && styles.desktopContainer, !IS_DESKTOP && { height: heightAnim }]}>
           {/* Top Bar with PanResponder */}
-          <View {...panResponder.panHandlers} style={styles.topBar}>
+          <View {...(!IS_DESKTOP ? panResponder.panHandlers : {})} style={styles.topBar}>
             {/* Top Drag Handle */}
-            <View style={styles.handle} />
+            {!IS_DESKTOP && <View style={styles.handle} />}
 
             {/* Header */}
             <View style={styles.header}>
@@ -575,7 +576,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : 'stretch',
+    padding: IS_DESKTOP ? 24 : 0,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
@@ -585,6 +588,14 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
+  },
+  desktopContainer: {
+    borderRadius: 24,
+    width: 600,
+    maxWidth: '92%',
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
   topBar: {
     paddingTop: 12,
