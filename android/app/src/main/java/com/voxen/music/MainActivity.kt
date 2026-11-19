@@ -18,7 +18,12 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
-    requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    // Allow rotation on tablets while keeping phones locked to portrait.
+    requestedOrientation = if (resources.configuration.smallestScreenWidthDp >= 600) {
+      ActivityInfo.SCREEN_ORIENTATION_SENSOR
+    } else {
+      ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    }
   }
 
   override fun onNewIntent(intent: android.content.Intent) {

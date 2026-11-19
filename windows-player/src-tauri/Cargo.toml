@@ -1,0 +1,26 @@
+[package]
+name = "voxen-windows"
+version = "1.0.1"
+description = "Voxen Windows masaüstü müzik uygulaması"
+authors = ["Laze Studio"]
+license = "UNLICENSED"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+open = "5"
+
+[features]
+# Bu özellik, üretim derlemelerinde Tauri'nin özel protokolünü kullanır.
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

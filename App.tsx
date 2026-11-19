@@ -1,7 +1,8 @@
 import { useThemeColors, useThemeStyles, type Palette } from './src/utils/useTheme';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, Dimensions, Platform, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useUiStore } from './src/store/uiStore';
 import { useAuthStore } from './src/store/authStore';
@@ -41,9 +42,11 @@ import { ListeningRoomModal } from './src/components/ListeningRoomModal';
 import { NotificationsModal } from './src/components/NotificationsModal';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { networkStatus } from './src/services/network/networkStatus';
+import { syncService } from './src/services/sync/syncService';
 import { widgetService } from './src/services/widget/widgetService';
 
 import { Colors } from './src/constants/theme';
+import { installDesktopWebEffects } from './src/utils/desktopWebEffects';
 
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
@@ -52,10 +55,59 @@ export default function App() {
   const styles = useThemeStyles(createStyles);
   const { activeTab } = useUiStore();
   const { initAuthListener, isLoading } = useAuthStore();
+  const accountReady = useMusicStore(state => state.accountReady);
+  const syncImportedPlaylist = useMusicStore(state => state.syncImportedPlaylist);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    // Keep phones portrait, while letting tablets rotate in either direction.
+    const { width, height } = Dimensions.get('screen');
+    const isTablet = Math.min(width, height) >= 600;
+    void (isTablet
+      ? ScreenOrientation.unlockAsync()
+      : ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
+    ).catch(error => console.warn('Could not set screen orientation:', error));
+  }, []);
+
+  useEffect(() => {
+    if (!accountReady) return;
+    let syncing = false;
+    let mounted = true;
+    const syncImportedPlaylists = async () => {
+      if (!mounted || syncing || AppState.currentState !== 'active') return;
+      syncing = true;
+      try {
+        const imported = useMusicStore.getState().playlists.filter(playlist => !!playlist.sourcePlaylistId);
+        for (const playlist of imported) {
+          if (!mounted) break;
+          await syncImportedPlaylist(playlist.id);
+        }
+      } catch (error) {
+        console.warn('Automatic YouTube playlist sync failed:', error);
+      } finally {
+        syncing = false;
+      }
+    };
+
+    void syncImportedPlaylists();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void syncImportedPlaylists();
+    });
+    const timer = setInterval(() => void syncImportedPlaylists(), 15 * 60 * 1000);
+    return () => {
+      mounted = false;
+      subscription.remove();
+      clearInterval(timer);
+    };
+  }, [accountReady, syncImportedPlaylist]);
+
+  useEffect(() => {
+    if (IS_DESKTOP) installDesktopWebEffects();
+
     // Start background network monitoring
     const stopNetworkMonitoring = networkStatus.startMonitoring(online => {
+      syncService.setOnline(online);
       if (online) void useMusicStore.getState().syncWithCloud();
     });
 
@@ -243,6 +295,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   },
   desktopContentFrame: {
     width: '100%',
+    maxWidth: 1320,
     flex: 1,
   },
   desktopPlayerDock: {

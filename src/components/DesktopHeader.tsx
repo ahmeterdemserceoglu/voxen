@@ -24,12 +24,12 @@ export function DesktopHeader() {
   );
 
   return (
-    <View style={[styles.header, draggable, { backgroundColor: 'rgba(9, 9, 11, 0.95)' }]}>
+    <View style={[styles.header, draggable, { backgroundColor: colors.glassDark }]}>
       <TouchableOpacity accessibilityLabel="Ana sayfa" onPress={() => setActiveTab('home')} style={[styles.brand, interactive]}>
         <View style={[styles.mark, { backgroundColor: colors.primary }]}><Ionicons name="pulse" size={20} color="#fff" /></View>
         <Text style={[styles.brandText, { color: colors.text }]}>VOXEN</Text>
       </TouchableOpacity>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Müzik ara" onPress={() => setActiveTab('search')} style={[styles.search, interactive, { backgroundColor: colors.surface, borderColor: 'rgba(255, 255, 255, 0.08)' }]}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Müzik ara" onPress={() => setActiveTab('search')} style={[styles.search, interactive, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Ionicons name="search-outline" size={17} color={colors.textMuted} />
         <Text style={[styles.searchText, { color: colors.textMuted }]}>Şarkı, sanatçı veya albüm ara...</Text>
       </TouchableOpacity>

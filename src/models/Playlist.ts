@@ -18,6 +18,8 @@ export interface Playlist {
   totalDuration: number;  // seconds
 
   coverUrl?: string;  // custom cover; falls back to track artwork collage
+  sourcePlaylistId?: string; // YouTube playlist to keep this imported copy in sync with
+  lastSourceSyncAt?: number;
 
   createdAt: number;  // epoch ms
   updatedAt: number;

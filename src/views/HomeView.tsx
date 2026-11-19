@@ -620,13 +620,13 @@ export const HomeView: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: Colors.background,
   },
   scrollContent: {
     paddingHorizontal: 16,
   },
   desktopScrollContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 32,
   },
   headerRow: {
     flexDirection: 'row',
@@ -641,7 +641,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   brandText: {
     fontSize: 26,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: -0.5,
   },
   brandDot: {
@@ -667,9 +667,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: Colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -765,13 +765,13 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   navTitleText: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: -0.3,
   },
   playAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: Colors.surfaceElevated,
     borderWidth: 1,
     borderColor: 'rgba(229, 9, 20, 0.45)',
     paddingHorizontal: 12,
@@ -781,7 +781,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   playAllText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   quickPicksGrid: {
     gap: 14,
@@ -826,7 +826,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   songTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: -0.2,
   },
   songTitleActive: {
@@ -846,7 +846,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: Colors.border,
   },
   heroBg: {
     width: '100%',
@@ -936,28 +936,28 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     gap: 14,
   },
   trackCard: {
-    width: 132,
+    width: IS_DESKTOP ? 172 : 132,
   },
   trackCardWide: {
-    width: 208,
+    width: IS_DESKTOP ? 260 : 208,
   },
   trackCardTall: {
-    width: 154,
+    width: IS_DESKTOP ? 196 : 154,
   },
   cardCoverWrapper: {
     width: '100%',
-    height: 132,
+    height: IS_DESKTOP ? 172 : 132,
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: Colors.card,
     position: 'relative',
   },
   cardCoverWide: {
-    height: 128,
+    height: IS_DESKTOP ? 164 : 128,
     borderRadius: 18,
   },
   cardCoverTall: {
-    height: 178,
+    height: IS_DESKTOP ? 218 : 178,
     borderRadius: 18,
   },
   cardCover: {
@@ -989,7 +989,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   cardTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.text,
     marginTop: 8,
   },
   cardArtist: {
@@ -1008,15 +1008,15 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     color: Colors.textMuted,
   },
   dailyMixCard: {
-    width: 174,
-    height: 206,
+    width: IS_DESKTOP ? 210 : 174,
+    height: IS_DESKTOP ? 248 : 206,
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: Colors.border,
   },
   dailyMixCardFeatured: {
-    width: 246,
+    width: IS_DESKTOP ? 296 : 246,
   },
   dailyMixGradient: {
     flex: 1,
@@ -1092,10 +1092,10 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     fontWeight: '600',
   },
   recentCard: {
-    width: IS_DESKTOP ? 320 : Math.min(SCREEN_WIDTH * 0.78, 310),
+    width: IS_DESKTOP ? 360 : Math.min(SCREEN_WIDTH * 0.78, 310),
     height: 64,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.045)',
+    backgroundColor: Colors.surfaceElevated,
     padding: 6,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1141,12 +1141,12 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderRadius: 10,
   },
   podcastCard: {
-    width: 140,
+    width: IS_DESKTOP ? 172 : 140,
     marginRight: 14,
   },
   podcastCover: {
-    width: 140,
-    height: 140,
+    width: '100%',
+    height: IS_DESKTOP ? 172 : 140,
     borderRadius: 14,
     backgroundColor: Colors.surfaceElevated,
     marginBottom: 8,

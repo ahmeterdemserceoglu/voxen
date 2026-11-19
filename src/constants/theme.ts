@@ -1,6 +1,7 @@
 /** App theme colors — Material 3 dark, Voxen identity */
 export const Colors = {
   background: '#0A0A0C',
+  sidebar: '#0D0D0F',
   surface: '#16161B',
   card: '#16161B',
   surfaceElevated: '#1E1E24',

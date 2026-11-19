@@ -67,6 +67,7 @@ export const ProfileView: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.contentColumn}>
         {/* User Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
@@ -246,7 +247,8 @@ export const ProfileView: React.FC = () => {
         <View style={styles.footer}>
           <Text style={styles.appName}>VOXEN</Text>
           <Text style={styles.appDesc}>Material 3 • YouTube Music İstemcisi • Reklamsız</Text>
-          <Text style={styles.version}>Sürüm 1.0.2</Text>
+          <Text style={styles.version}>Sürüm 1.0.5</Text>
+        </View>
         </View>
       </ScrollView>
     </View>
@@ -262,7 +264,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: IS_DESKTOP ? 32 : 20,
     paddingTop: IS_DESKTOP ? 30 : 56,
     paddingBottom: 16,
   },
@@ -284,8 +286,13 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: IS_DESKTOP ? 8 : 16,
-    paddingBottom: IS_DESKTOP ? 130 : 180,
+    paddingHorizontal: IS_DESKTOP ? 32 : 16,
+    paddingBottom: IS_DESKTOP ? 150 : 180,
+  },
+  contentColumn: {
+    width: '100%',
+    maxWidth: IS_DESKTOP ? 780 : undefined,
+    alignSelf: IS_DESKTOP ? 'center' : undefined,
   },
   userCard: {
     flexDirection: 'row',

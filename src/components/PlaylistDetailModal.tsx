@@ -4,6 +4,7 @@ import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  ActivityIndicator,
   Easing,
   FlatList,
   Keyboard,
@@ -138,6 +139,7 @@ export const PlaylistDetailModal: React.FC = () => {
   const [confirmNameInput, setConfirmNameInput] = useState('');
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [renameInput, setRenameInput] = useState('');
+  const [isSourceSyncing, setIsSourceSyncing] = useState(false);
 
   const {
     activePlaylistDetail,
@@ -147,6 +149,7 @@ export const PlaylistDetailModal: React.FC = () => {
     isPlaying,
     deletePlaylist,
     renamePlaylist,
+    syncImportedPlaylist,
     openActionSheet,
   } = useMusicStore();
 
@@ -209,6 +212,14 @@ export const PlaylistDetailModal: React.FC = () => {
     setFilterQuery('');
     searchAnim.setValue(0);
   }, [activePlaylistDetail?.id]);
+
+  useEffect(() => {
+    if (activePlaylistDetail?.sourcePlaylistId) {
+      void syncImportedPlaylist(activePlaylistDetail.id).catch(error => {
+        console.warn('YouTube playlist refresh failed:', error);
+      });
+    }
+  }, [activePlaylistDetail?.id, activePlaylistDetail?.sourcePlaylistId, syncImportedPlaylist]);
 
   const handlePlayTrack = useCallback(
     (item: TrackItem) => {
@@ -311,6 +322,27 @@ export const PlaylistDetailModal: React.FC = () => {
     setIsRenameOpen(true);
   };
 
+  const handleSyncSourcePlaylist = async () => {
+    if (!activePlaylistDetail?.sourcePlaylistId || isSourceSyncing) return;
+    setIsSourceSyncing(true);
+    try {
+      const addedCount = await syncImportedPlaylist(activePlaylistDetail.id, true);
+      setIsMenuOpen(false);
+      if (addedCount === null) {
+        appAlert('Güncelleme başarısız', 'YouTube listesine ulaşılamadı. Bağlantıyı kontrol edip tekrar deneyebilirsin.');
+      } else if (addedCount === 0) {
+        appAlert('Liste güncel', 'YouTube listesinde yeni şarkı bulunamadı.');
+      } else {
+        appAlert('Liste güncellendi', `${addedCount} yeni şarkı eklendi.`);
+      }
+    } catch (error) {
+      console.warn('Manual YouTube playlist sync failed:', error);
+      appAlert('Güncelleme başarısız', 'Liste güncellenirken bir sorun oluştu. Tekrar deneyebilirsin.');
+    } finally {
+      setIsSourceSyncing(false);
+    }
+  };
+
   const handleSaveRename = async () => {
     const trimmed = renameInput.trim();
 
@@ -403,6 +435,7 @@ export const PlaylistDetailModal: React.FC = () => {
      
 
 
+        <View style={[styles.heroInfo, isLandscape && styles.heroInfoLandscape]}>
           <TouchableOpacity
             style={[styles.titleTouchZone, isLandscape && styles.titleTouchZoneLandscape]}
             activeOpacity={0.72}
@@ -608,6 +641,8 @@ export const PlaylistDetailModal: React.FC = () => {
           </View>
         </View>
 
+        </View>
+
       <View style={styles.trackSectionHeader}>
         <View>
           <Text style={styles.trackSectionTitle}>Şarkılar</Text>
@@ -796,6 +831,28 @@ export const PlaylistDetailModal: React.FC = () => {
 
                 <View style={styles.menuDivider} />
                 <BulkDownloadButton tracks={tracks} menu onStarted={() => setIsMenuOpen(false)} />
+
+                {!!activePlaylistDetail.sourcePlaylistId && (
+                  <TouchableOpacity
+                    style={styles.menuRowItem}
+                    activeOpacity={0.72}
+                    disabled={isSourceSyncing}
+                    onPress={handleSyncSourcePlaylist}
+                  >
+                    <View style={styles.menuIconCircle}>
+                      {isSourceSyncing ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Ionicons name="sync-outline" size={21} color="#FFFFFF" />
+                      )}
+                    </View>
+                    <View style={styles.menuRowText}>
+                      <Text style={styles.menuRowTitle}>{isSourceSyncing ? 'YouTube listesi kontrol ediliyor…' : 'YouTube listesini şimdi güncelle'}</Text>
+                      <Text style={styles.menuRowSub}>Yeni eklenen şarkıları Voxen’a aktar</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.28)" />
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.menuRowItem}

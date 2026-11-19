@@ -1,5 +1,5 @@
 import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,6 +10,8 @@ import {
   Platform,
   ActivityIndicator,
   Share,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +21,7 @@ import { useMusicStore } from '../store/musicStore';
 import { useUiStore } from '../store/uiStore';
 import { useAlbumNavigation } from '../hooks/useAlbumNavigation';
 import { trackArtwork } from '../utils/artwork';
+import { appAlert } from '../utils/appAlert';
 import { Colors } from '../constants/theme';
 
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
@@ -65,20 +68,79 @@ export const FullPlayerModal: React.FC = () => {
     setPlaybackStatus,
   } = useMusicStore();
 
-  const albumNavigation = useAlbumNavigation(currentTrack, closeFullPlayer);
   const sliderWidth = useRef(1);
   const scrubTarget = useRef(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubPosition, setScrubPosition] = useState(0);
+  const [sliderHovered, setSliderHovered] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const modalTranslateY = useRef(new Animated.Value(windowHeight * 0.2)).current;
+
+  const handleClose = useCallback(() => {
+    if (isClosing) return;
+    setIsClosing(true);
+
+    backdropOpacity.stopAnimation();
+    modalTranslateY.stopAnimation();
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(modalTranslateY, {
+        toValue: windowHeight * 0.18,
+        duration: 220,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      setIsClosing(false);
+      if (finished) closeFullPlayer();
+    });
+  }, [backdropOpacity, closeFullPlayer, isClosing, modalTranslateY, windowHeight]);
+
+  const albumNavigation = useAlbumNavigation(currentTrack, IS_DESKTOP ? handleClose : closeFullPlayer);
 
   useEffect(() => {
     if (!IS_DESKTOP || !isFullPlayerOpen || activeModal) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeFullPlayer(); }
+      if (event.key === 'Escape') { event.preventDefault(); handleClose(); }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isFullPlayerOpen, activeModal, closeFullPlayer]);
+  }, [isFullPlayerOpen, activeModal, handleClose]);
+
+  useEffect(() => {
+    backdropOpacity.stopAnimation();
+    modalTranslateY.stopAnimation();
+    if (!isFullPlayerOpen) {
+      backdropOpacity.setValue(0);
+      modalTranslateY.setValue(windowHeight * 0.2);
+      return;
+    }
+
+    backdropOpacity.setValue(0);
+    modalTranslateY.setValue(windowHeight * 0.2);
+
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(modalTranslateY, {
+        toValue: 0,
+        friction: 9,
+        tension: 75,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isFullPlayerOpen, windowHeight, backdropOpacity, modalTranslateY]);
 
   if (!currentTrack) return null;
 
@@ -86,12 +148,22 @@ export const FullPlayerModal: React.FC = () => {
   const currentPos = isScrubbing ? scrubPosition : position;
   const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentPos / duration)) : 0;
 
+  const shareUrl = `https://music.youtube.com/watch?v=${currentTrack.id}`;
+
   const handleShare = async () => {
+    const message = `${currentTrack.title} - ${currentTrack.artist}\n${shareUrl}`;
+    if (IS_DESKTOP || typeof navigator !== 'undefined' && !navigator.share) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      } catch {
+        appAlert('Paylaşım', shareUrl);
+      }
+      return;
+    }
     try {
-      await Share.share({
-        message: `${currentTrack.title} - ${currentTrack.artist}\nhttps://music.youtube.com/watch?v=${currentTrack.id}`,
-        title: currentTrack.title,
-      });
+      await Share.share({ message, title: currentTrack.title });
     } catch {
       // ignore
     }
@@ -115,7 +187,16 @@ export const FullPlayerModal: React.FC = () => {
   if (IS_DESKTOP) {
     if (!isFullPlayerOpen) return null;
     return (
-        <View style={[styles.desktopModal, styles.desktopOverlay]}>
+        <Animated.View
+          style={[
+            styles.desktopModal,
+            styles.desktopOverlay,
+            {
+              opacity: backdropOpacity,
+              transform: [{ translateY: modalTranslateY }],
+            },
+          ]}
+        >
           <LinearGradient
             colors={['rgba(84, 7, 12, 0.72)', '#111114', '#080809']}
             locations={[0, 0.52, 1]}
@@ -123,15 +204,15 @@ export const FullPlayerModal: React.FC = () => {
           />
 
           <View style={styles.desktopHeader}>
-            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={closeFullPlayer} activeOpacity={0.75} accessibilityLabel="Oynatıcıyı kapat">
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleClose} activeOpacity={0.75} accessibilityLabel="Oynatıcıyı kapat">
               <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.desktopHeaderBrand}>
               <View style={styles.desktopBrandDot} />
               <Text style={styles.desktopBrandText}>VOXEN</Text>
             </View>
-            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleShare} activeOpacity={0.75} accessibilityLabel="Şarkıyı paylaş">
-              <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+            <TouchableOpacity style={styles.desktopHeaderBtn} onPress={handleShare} activeOpacity={0.75} accessibilityLabel="Şarkı bağlantısını kopyala">
+              <Ionicons name={shareCopied ? 'checkmark-outline' : 'share-outline'} size={20} color={shareCopied ? Colors.success : '#FFFFFF'} />
             </TouchableOpacity>
           </View>
 
@@ -195,6 +276,7 @@ export const FullPlayerModal: React.FC = () => {
                 <View
                   style={styles.sliderTouchArea}
                   onLayout={(evt) => { sliderWidth.current = Math.max(1, evt.nativeEvent.layout.width); }}
+                  {...(IS_DESKTOP ? { onMouseEnter: () => setSliderHovered(true), onMouseLeave: () => setSliderHovered(false) } : {})}
                   onResponderTerminationRequest={() => false}
                   onResponderTerminate={() => setIsScrubbing(false)}
                   onStartShouldSetResponder={() => true}
@@ -209,7 +291,7 @@ export const FullPlayerModal: React.FC = () => {
                 >
                   <View style={styles.sliderTrack} pointerEvents="none">
                     <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
-                    <View style={[styles.sliderThumb, { left: `${Math.max(0, Math.min(97, progressRatio * 100))}%` }]} />
+                    <View style={[styles.sliderThumb, (sliderHovered || isScrubbing) && styles.sliderThumbActive, { left: `${Math.max(0, Math.min(97, progressRatio * 100))}%` }]} />
                   </View>
                 </View>
                 <View style={styles.timeRow}>
@@ -241,7 +323,7 @@ export const FullPlayerModal: React.FC = () => {
                   <Ionicons name="mic-outline" size={16} color={Colors.text} />
                   <Text style={styles.desktopBottomActionText}>Şarkı sözleri</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.desktopBottomAction} onPress={() => { closeFullPlayer(); openModal('related'); }}>
+                <TouchableOpacity style={styles.desktopBottomAction} onPress={() => { handleClose(); openModal('related'); }}>
                   <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
                   <Text style={styles.desktopBottomActionText}>Benzer parçalar</Text>
                 </TouchableOpacity>
@@ -252,283 +334,293 @@ export const FullPlayerModal: React.FC = () => {
               </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
     );
   }
 
   return (
     <Modal
       visible={isFullPlayerOpen}
-      animationType="slide"
+      transparent
+      animationType="none"
       presentationStyle="overFullScreen"
       statusBarTranslucent
-      onRequestClose={closeFullPlayer}
+      onRequestClose={handleClose}
     >
-      <View style={[styles.container, { paddingTop: insets.top || 20, paddingBottom: insets.bottom || 24 }]}>
-        {/* Subtle Ambient Vignette Background */}
+      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
         <LinearGradient
           colors={['rgba(229, 9, 20, 0.18)', 'rgba(22, 22, 24, 0.95)', '#0B0B0B']}
           style={StyleSheet.absoluteFill}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 0.65 }}
+          pointerEvents="none"
         />
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleClose} />
 
-        {/* Top Header Bar */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.headerGlassBtn}
-            onPress={closeFullPlayer}
-            accessibilityLabel="Oynatıcıyı kapat"
-            activeOpacity={0.7}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+        <Animated.View
+          style={[
+            styles.container,
+            { paddingTop: insets.top || 20, paddingBottom: insets.bottom || 24 },
+            { transform: [{ translateY: modalTranslateY }] },
+          ]}
+        >
+          {/* Top Header Bar */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.headerGlassBtn}
+              onPress={handleClose}
+              accessibilityLabel="Oynatıcıyı kapat"
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="chevron-down" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
 
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerSub}>ŞİMDİ OYNATILIYOR</Text>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {queue.length > 1 ? `Çalma Listesi` : 'Voxen Music'}
-            </Text>
+            <View style={styles.headerCenter}>
+              <Text style={styles.headerSub}>ŞİMDİ OYNATILIYOR</Text>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {queue.length > 1 ? `Çalma Listesi` : 'Voxen Music'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.headerGlassBtn}
+              onPress={handleShare}
+              accessibilityLabel="Şarkıyı paylaş"
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.headerGlassBtn}
-            onPress={handleShare}
-            accessibilityLabel="Şarkıyı paylaş"
-            activeOpacity={0.7}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Main Album Artwork */}
-        <View style={styles.artworkContainer}>
-          <View style={styles.artworkShadow}>
-            <Image
-              source={{ uri: trackArtwork(currentTrack, true) }}
-              cachePolicy="memory-disk"
-              style={[styles.artwork, { width: artworkSize, height: artworkSize }, !!streamError && styles.artworkDimmed]}
-              contentFit="cover"
-              transition={300}
-            />
-            {/* Stream Error Overlay */}
-            {streamError && (
-              <View style={styles.errorOverlay}>
-                <Ionicons name="alert-circle" size={36} color="#FF6B6B" />
-                <Text style={styles.errorText}>{streamError}</Text>
-                <TouchableOpacity
-                  style={styles.retryBtn}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    if (currentTrack) {
-                      // Clear error and re-trigger load by re-playing the current track
-                      setPlaybackStatus({ streamError: null });
-                      retryPlayback();
-                    }
-                  }}
-                >
-                  <Ionicons name="refresh" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.retryBtnText}>Yeniden Dene</Text>
-                </TouchableOpacity>
-                {queue.length > 1 && (
+          {/* Main Album Artwork */}
+          <View style={styles.artworkContainer}>
+            <View style={styles.artworkShadow}>
+              <Image
+                source={{ uri: trackArtwork(currentTrack, true) }}
+                cachePolicy="memory-disk"
+                style={[styles.artwork, { width: artworkSize, height: artworkSize }, !!streamError && styles.artworkDimmed]}
+                contentFit="cover"
+                transition={300}
+              />
+              {/* Stream Error Overlay */}
+              {streamError && (
+                <View style={styles.errorOverlay}>
+                  <Ionicons name="alert-circle" size={36} color="#FF6B6B" />
+                  <Text style={styles.errorText}>{streamError}</Text>
                   <TouchableOpacity
-                    style={[styles.retryBtn, styles.skipErrorBtn]}
+                    style={styles.retryBtn}
                     activeOpacity={0.8}
-                    onPress={() => skipNext()}
+                    onPress={() => {
+                      if (currentTrack) {
+                        // Clear error and re-trigger load by re-playing the current track
+                        setPlaybackStatus({ streamError: null });
+                        retryPlayback();
+                      }
+                    }}
                   >
-                    <Ionicons name="play-skip-forward" size={16} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
-                    <Text style={[styles.retryBtnText, { color: 'rgba(255,255,255,0.7)' }]}>Sonraki Şarkıya Geç</Text>
+                    <Ionicons name="refresh" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.retryBtnText}>Yeniden Dene</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Title, Artist and Heart Favorite Button */}
-        <View style={styles.metaRow}>
-          <View style={styles.titleCol}>
-            <Text style={styles.trackTitle} numberOfLines={1}>
-              {currentTrack.title}
-            </Text>
-            <Text style={styles.trackArtist} numberOfLines={1}>
-              {currentTrack.artist}
-            </Text>
-            <TouchableOpacity accessibilityLabel="Şarkının albümünü aç" disabled={albumNavigation.loading} onPress={() => { void albumNavigation.open(); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 9 }}>
-              {albumNavigation.loading ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="disc-outline" size={15} color={Colors.primary} />}
-              <Text numberOfLines={1} style={{ flexShrink: 1, color: Colors.primary, fontSize: 12 }}>{typeof currentTrack.album === 'object' ? currentTrack.album.title : currentTrack.album || 'Albümü görüntüle'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity
-              style={styles.glassCircleBtn}
-              activeOpacity={0.7}
-              onPress={() => openAddToPlaylist(currentTrack)}
-            >
-              <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.glassCircleBtn, isFav && styles.heartActiveBtn]}
-              activeOpacity={0.7}
-              onPress={() => toggleFavorite(currentTrack)}
-            >
-              <Ionicons
-                name={isFav ? 'heart' : 'heart-outline'}
-                size={22}
-                color={isFav ? '#FFFFFF' : Colors.textMuted}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Custom Sleek Slider */}
-        <View style={styles.sliderContainer}>
-          <View
-            style={styles.sliderTouchArea}
-            onLayout={(evt) => { sliderWidth.current = Math.max(1, evt.nativeEvent.layout.width); }}
-            onResponderTerminationRequest={() => false}
-            onResponderTerminate={() => setIsScrubbing(false)}
-            onStartShouldSetResponder={() => true}
-            onResponderGrant={(evt) => {
-              setIsScrubbing(true);
-              handleProgressTouch(evt);
-            }}
-            onResponderMove={handleProgressTouch}
-            onResponderRelease={handleProgressRelease}
-            accessibilityRole="adjustable"
-            accessibilityLabel="Şarkı konumu"
-            accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}
-            accessibilityActions={[{ name: 'increment', label: 'İleri sar' }, { name: 'decrement', label: 'Geri sar' }]}
-            onAccessibilityAction={(event) => seekTo(Math.max(0, Math.min(duration, position + (event.nativeEvent.actionName === 'increment' ? 5000 : -5000))))}
-          >
-            <View style={styles.sliderTrack} pointerEvents="none">
-              <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
-              <View
-                style={[
-                  styles.sliderThumb,
-                  { left: `${Math.max(0, Math.min(97, progressRatio * 100))}%` },
-                ]}
-              />
+                  {queue.length > 1 && (
+                    <TouchableOpacity
+                      style={[styles.retryBtn, styles.skipErrorBtn]}
+                      activeOpacity={0.8}
+                      onPress={() => skipNext()}
+                    >
+                      <Ionicons name="play-skip-forward" size={16} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
+                      <Text style={[styles.retryBtnText, { color: 'rgba(255,255,255,0.7)' }]}>Sonraki Şarkıya Geç</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Time stamps */}
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatTime(currentPos)}</Text>
-            <Text style={styles.timeText}>{formatTime(duration)}</Text>
+          {/* Title, Artist and Heart Favorite Button */}
+          <View style={styles.metaRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.trackTitle} numberOfLines={1}>
+                {currentTrack.title}
+              </Text>
+              <Text style={styles.trackArtist} numberOfLines={1}>
+                {currentTrack.artist}
+              </Text>
+              <TouchableOpacity accessibilityLabel="Şarkının albümünü aç" disabled={albumNavigation.loading} onPress={() => { void albumNavigation.open(); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 9 }}>
+                {albumNavigation.loading ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="disc-outline" size={15} color={Colors.primary} />}
+                <Text numberOfLines={1} style={{ flexShrink: 1, color: Colors.primary, fontSize: 12 }}>{typeof currentTrack.album === 'object' ? currentTrack.album.title : currentTrack.album || 'Albümü görüntüle'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity
+                style={styles.glassCircleBtn}
+                activeOpacity={0.7}
+                onPress={() => openAddToPlaylist(currentTrack)}
+              >
+                <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.glassCircleBtn, isFav && styles.heartActiveBtn]}
+                activeOpacity={0.7}
+                onPress={() => toggleFavorite(currentTrack)}
+              >
+                <Ionicons
+                  name={isFav ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color={isFav ? '#FFFFFF' : Colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
-        {/* Playback Controls */}
-        <View style={styles.controlsRow}>
-          {/* Shuffle */}
-          <TouchableOpacity
-            style={styles.controlSubBtn}
-            onPress={toggleShuffle}
-            accessibilityLabel={shuffle ? 'Karışık çalmayı kapat' : 'Karışık çalmayı aç'}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="shuffle"
-              size={22}
-              color={shuffle ? Colors.primary : 'rgba(255,255,255,0.45)'}
-            />
-          </TouchableOpacity>
+          {/* Custom Sleek Slider */}
+          <View style={styles.sliderContainer}>
+            <View
+              style={styles.sliderTouchArea}
+              onLayout={(evt) => { sliderWidth.current = Math.max(1, evt.nativeEvent.layout.width); }}
+              onResponderTerminationRequest={() => false}
+              onResponderTerminate={() => setIsScrubbing(false)}
+              onStartShouldSetResponder={() => true}
+              onResponderGrant={(evt) => {
+                setIsScrubbing(true);
+                handleProgressTouch(evt);
+              }}
+              onResponderMove={handleProgressTouch}
+              onResponderRelease={handleProgressRelease}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Şarkı konumu"
+              accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}
+              accessibilityActions={[{ name: 'increment', label: 'İleri sar' }, { name: 'decrement', label: 'Geri sar' }]}
+              onAccessibilityAction={(event) => seekTo(Math.max(0, Math.min(duration, position + (event.nativeEvent.actionName === 'increment' ? 5000 : -5000))))}
+            >
+              <View style={styles.sliderTrack} pointerEvents="none">
+                <View style={[styles.sliderFill, { width: `${progressRatio * 100}%` }]} />
+                <View
+                  style={[
+                    styles.sliderThumb,
+                    { left: `${Math.max(0, Math.min(97, progressRatio * 100))}%` },
+                  ]}
+                />
+              </View>
+            </View>
 
-          {/* Previous Track */}
-          <TouchableOpacity
-            style={styles.controlSkipBtn}
-            onPress={skipPrevious}
-            accessibilityLabel="Önceki şarkı"
-            activeOpacity={0.7}
-          >
-            <Ionicons name="play-skip-back" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
+            {/* Time stamps */}
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>{formatTime(currentPos)}</Text>
+              <Text style={styles.timeText}>{formatTime(duration)}</Text>
+            </View>
+          </View>
 
-          {/* Center 72dp Maxen Red Play/Pause Button */}
-          <TouchableOpacity
-            style={styles.playPauseBtn}
-            onPress={togglePlayPause}
-            accessibilityLabel={isPlaying ? 'Duraklat' : 'Oynat'}
-            activeOpacity={0.85}
-          >
-            {isLoadingStream ? (
-              <ActivityIndicator size="large" color="#FFFFFF" />
-            ) : (
+          {/* Playback Controls */}
+          <View style={styles.controlsRow}>
+            {/* Shuffle */}
+            <TouchableOpacity
+              style={styles.controlSubBtn}
+              onPress={toggleShuffle}
+              accessibilityLabel={shuffle ? 'Karışık çalmayı kapat' : 'Karışık çalmayı aç'}
+              activeOpacity={0.7}
+            >
               <Ionicons
-                name={isPlaying ? 'pause' : 'play'}
-                size={34}
-                color="#FFFFFF"
-                style={{ marginLeft: isPlaying ? 0 : 3 }}
+                name="shuffle"
+                size={22}
+                color={shuffle ? Colors.primary : 'rgba(255,255,255,0.45)'}
               />
-            )}
-          </TouchableOpacity>
+            </TouchableOpacity>
 
-          {/* Next Track */}
-          <TouchableOpacity
-            style={styles.controlSkipBtn}
-            onPress={() => skipNext()}
-            accessibilityLabel="Sonraki şarkı"
-            activeOpacity={0.7}
-          >
-            <Ionicons name="play-skip-forward" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
+            {/* Previous Track */}
+            <TouchableOpacity
+              style={styles.controlSkipBtn}
+              onPress={skipPrevious}
+              accessibilityLabel="Önceki şarkı"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="play-skip-back" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
 
-          {/* Repeat */}
-          <TouchableOpacity
-            style={styles.controlSubBtn}
-            onPress={() => {
-              if (repeatMode === 'off') setRepeatMode('all');
-              else if (repeatMode === 'all') setRepeatMode('one');
-              else setRepeatMode('off');
-            }}
-            accessibilityLabel={`Tekrar modu: ${repeatMode === 'one' ? 'tek şarkı' : repeatMode === 'all' ? 'tüm sıra' : 'kapalı'}`}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'}
-              size={22}
-              color={repeatMode !== 'off' ? Colors.primary : 'rgba(255,255,255,0.45)'}
-            />
-          </TouchableOpacity>
-        </View>
+            {/* Center 72dp Maxen Red Play/Pause Button */}
+            <TouchableOpacity
+              style={styles.playPauseBtn}
+              onPress={togglePlayPause}
+              accessibilityLabel={isPlaying ? 'Duraklat' : 'Oynat'}
+              activeOpacity={0.85}
+            >
+              {isLoadingStream ? (
+                <ActivityIndicator size="large" color="#FFFFFF" />
+              ) : (
+                <Ionicons
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={34}
+                  color="#FFFFFF"
+                  style={{ marginLeft: isPlaying ? 0 : 3 }}
+                />
+              )}
+            </TouchableOpacity>
 
-        {/* Bottom Actions: Lyrics, Related & Queue */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.lyricsPill}
-            onPress={() => openModal('lyrics')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="mic-outline" size={16} color={Colors.text} />
-            <Text style={styles.lyricsText}>Sözler</Text>
-          </TouchableOpacity>
+            {/* Next Track */}
+            <TouchableOpacity
+              style={styles.controlSkipBtn}
+              onPress={() => skipNext()}
+              accessibilityLabel="Sonraki şarkı"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="play-skip-forward" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.lyricsPill}
-            onPress={() => { closeFullPlayer(); openModal('related'); }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
-            <Text style={styles.lyricsText}>Benzerler</Text>
-          </TouchableOpacity>
+            {/* Repeat */}
+            <TouchableOpacity
+              style={styles.controlSubBtn}
+              onPress={() => {
+                if (repeatMode === 'off') setRepeatMode('all');
+                else if (repeatMode === 'all') setRepeatMode('one');
+                else setRepeatMode('off');
+              }}
+              accessibilityLabel={`Tekrar modu: ${repeatMode === 'one' ? 'tek şarkı' : repeatMode === 'all' ? 'tüm sıra' : 'kapalı'}`}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'}
+                size={22}
+                color={repeatMode !== 'off' ? Colors.primary : 'rgba(255,255,255,0.45)'}
+              />
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={styles.queuePill}
-            onPress={() => openModal('queue')}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="list" size={16} color={Colors.primary} />
-            <Text style={styles.queueText}>
-              Kuyruk
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          {/* Bottom Actions: Lyrics, Related & Queue */}
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              style={styles.lyricsPill}
+              onPress={() => openModal('lyrics')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="mic-outline" size={16} color={Colors.text} />
+              <Text style={styles.lyricsText}>Sözler</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.lyricsPill}
+              onPress={() => { handleClose(); openModal('related'); }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="sparkles-outline" size={16} color={Colors.primary} />
+              <Text style={styles.lyricsText}>Benzerler</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.queuePill}
+              onPress={() => openModal('queue')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="list" size={16} color={Colors.primary} />
+              <Text style={styles.queueText}>
+                Kuyruk
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 };
@@ -594,6 +686,10 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   desktopBottomActions: { flexDirection: 'row', gap: 8, marginTop: 25, flexWrap: 'wrap' },
   desktopBottomAction: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, height: 36, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
   desktopBottomActionText: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(7, 7, 9, 0.5)',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0B0B0B',
@@ -725,6 +821,12 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.8,
+  },
+  sliderThumbActive: {
+    top: -7,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     shadowRadius: 4,
     elevation: 4,
   },

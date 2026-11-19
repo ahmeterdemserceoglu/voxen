@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "voxen-main",
+  "description": "Ana pencere: yerel Voxen sunucusundan yüklenen arayüz için pencere kontrol izinleri",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:48731", "http://127.0.0.1:48731/*"]
+  },
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close"
+  ]
+}

@@ -7,6 +7,7 @@ import {
   Text,
   ActivityIndicator,
   Animated,
+  Easing,
   PanResponder,
   useWindowDimensions,
   Platform,
@@ -45,6 +46,8 @@ export const MiniPlayer: React.FC = () => {
 
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
+  const entranceOpacity = useRef(new Animated.Value(0)).current;
+  const entranceTranslateY = useRef(new Animated.Value(18)).current;
   const desktopProgressWidth = useRef(1);
   const windowWidthRef = useRef(windowWidth);
   windowWidthRef.current = windowWidth;
@@ -52,7 +55,24 @@ export const MiniPlayer: React.FC = () => {
   useEffect(() => {
     translateX.setValue(0);
     opacity.setValue(1);
-  }, [currentTrack?.id]);
+    entranceTranslateY.setValue(18);
+    entranceOpacity.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(entranceOpacity, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(entranceTranslateY, {
+        toValue: 0,
+        friction: 9,
+        tension: 68,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [currentTrack?.id, entranceOpacity, entranceTranslateY, opacity, translateX]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -187,8 +207,8 @@ export const MiniPlayer: React.FC = () => {
       style={[
         styles.container,
         {
-          transform: [{ translateX }],
-          opacity,
+          transform: [{ translateX }, { translateY: entranceTranslateY }],
+          opacity: Animated.multiply(opacity, entranceOpacity),
         },
       ]}
     >
@@ -261,10 +281,10 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   desktopContainer: {
     marginHorizontal: 22,
     marginBottom: 16,
-    backgroundColor: 'rgba(20,20,23,0.985)',
+    backgroundColor: Colors.glassBg,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: Colors.border,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },

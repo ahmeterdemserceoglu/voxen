@@ -19,6 +19,7 @@ import { useUiStore } from './uiStore';
 import { accountSession } from '../services/auth/accountStorage';
 import { socialService } from '../services/social/socialService';
 import { firestoreService } from '../services/firebase/firestoreService';
+import { syncService } from '../services/sync/syncService';
 
 interface AuthState {
   user: User | null;
@@ -51,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         try { require('react-native').NativeModules?.VoxenDownloader?.cancelAll(); } catch {}
       }
       const epoch = accountSession.switchTo(user?.uid ?? null);
+      void syncService.refreshStatus();
       set({ user, isLoading: true });
       useMusicStore.setState(useMusicStore.getInitialState());
       useLibraryStore.setState(useLibraryStore.getInitialState());

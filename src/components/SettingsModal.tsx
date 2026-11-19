@@ -22,6 +22,8 @@ import { useLibraryStore } from '../store/libraryStore';
 import { useUiStore } from '../store/uiStore';
 import { youtubeCache } from '../services/youtube/youtubeCache';
 import { Colors } from '../constants/theme';
+import { syncService, type SyncStatus } from '../services/sync/syncService';
+import { useMusicStore } from '../store/musicStore';
 
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 
@@ -33,6 +35,7 @@ export const SettingsModal: React.FC = () => {
   const isOpen = activeModal === 'settings';
 
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncService.getStatus());
   const fullScreenRef = useRef(false);
   fullScreenRef.current = isFullScreen;
   const defaultHeight = windowHeight * 0.75;
@@ -46,6 +49,8 @@ export const SettingsModal: React.FC = () => {
       heightAnim.setValue(defaultHeight);
     }
   }, [isOpen]);
+
+  useEffect(() => syncService.subscribe(setSyncStatus), []);
 
   useEffect(() => {
     if (isOpen) heightAnim.setValue(fullScreenRef.current ? fullHeight : defaultHeight);
@@ -120,6 +125,22 @@ export const SettingsModal: React.FC = () => {
       ]
     );
   };
+
+  const syncDescription = !user
+    ? 'Oturum açılmadı; veriler bu cihazda saklanıyor'
+    : syncStatus.isSyncing
+      ? 'Beğeniler ve listeler eşitleniyor'
+      : syncStatus.online === false
+        ? syncStatus.pendingCount > 0
+          ? `Çevrimdışı; ${syncStatus.pendingCount} değişiklik sırada`
+          : 'Çevrimdışı; değişiklikler bu cihazda saklanıyor'
+        : syncStatus.online === null
+          ? 'Bağlantı durumu kontrol ediliyor'
+          : syncStatus.lastError
+            ? 'Eşitleme başarısız; yeniden denenecek'
+            : syncStatus.pendingCount > 0
+              ? `${syncStatus.pendingCount} değişiklik eşitlenmeyi bekliyor`
+              : 'Tüm değişiklikler eşitlendi';
 
   const handleDeleteAccount = () => {
     appAlert(
@@ -357,6 +378,37 @@ export const SettingsModal: React.FC = () => {
                 <Text style={[styles.actionLabel, { color: Colors.primary }]}>
                   Dinleme Geçmişini Temizle
                 </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Bulut Senkronizasyonu</Text>
+              <TouchableOpacity
+                style={styles.actionRow}
+                disabled={!user || syncStatus.online !== true || syncStatus.isSyncing}
+                onPress={() => {
+                  if (user) void useMusicStore.getState().syncWithCloud(user.uid);
+                }}
+              >
+                <Ionicons
+                  name={syncStatus.lastError ? 'cloud-offline-outline' : 'cloud-done-outline'}
+                  size={20}
+                  color={syncStatus.lastError ? '#EF4444' : Colors.primary}
+                />
+                <View style={styles.rowText}>
+                  <Text style={styles.actionLabel}>
+                    {syncStatus.isSyncing ? 'Eşitleniyor…' : 'Kitaplık durumu'}
+                  </Text>
+                  <Text style={styles.rowSub}>
+                    {syncDescription}
+                    {user && syncStatus.lastError && syncStatus.pendingCount > 0
+                      ? ` · ${syncStatus.pendingCount} bekliyor`
+                      : ''}
+                  </Text>
+                </View>
+                {user && syncStatus.online === true && !syncStatus.isSyncing && (
+                  <Text style={[styles.actionLabel, { color: Colors.primary }]}>Eşitle</Text>
+                )}
               </TouchableOpacity>
             </View>
 

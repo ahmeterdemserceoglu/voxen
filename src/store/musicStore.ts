@@ -2,19 +2,26 @@ import { mergeLibrary, type LibrarySyncMeta } from '../services/sync/mergeLibrar
 import { tasteProfileService } from '../services/recommendations/tasteProfileService';
 import { create } from 'zustand';
 import { accountStorage as AsyncStorage, accountSession } from '../services/auth/accountStorage';
+import { accountStorage } from '../services/auth/accountStorage';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { useSettingsStore } from './settingsStore';
 import { useSocialStore } from './socialStore';
 import { normalizePlaylist } from '../models/Playlist';
 import { firestoreService } from '../services/firebase/firestoreService';
+import { isLibraryMutationType, mutationQueue } from '../services/sync/mutationQueue';
+import { syncService } from '../services/sync/syncService';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import type { Track, Playlist } from '../models';
+import type { MutationType, PendingLibrarySnapshot } from '../models';
+import { YouTubeService } from '../services/youtubeService';
+import { logger } from '../utils/logger';
 
 export type { Track as TrackItem } from '../models';
 export type { Playlist } from '../models';
 
 export type RepeatMode = 'off' | 'all' | 'one';
+const TAG = 'MusicStore';
 
 export type SourceContext = {
   type: 'album' | 'playlist' | 'artist' | 'search' | 'home' | 'liked' | 'radio';
@@ -22,6 +29,7 @@ export type SourceContext = {
 };
 
 let continuationRevision = 0;
+const importedPlaylistSyncs = new Map<string, Promise<number | null>>();
 const controlledByHost = () => {
   const room = useSocialStore.getState();
   return !!room.activeRoom && !!room.roomHostUid && room.roomHostUid !== accountSession.uid;
@@ -80,7 +88,8 @@ interface MusicState {
   openFullPlayer: () => void;
   closeFullPlayer: () => void;
   createPlaylist: (name: string, description?: string) => Promise<string>;
-  importPlaylist: (name: string, tracks: Track[], coverUrl?: string, description?: string) => Promise<Playlist>;
+  importPlaylist: (name: string, tracks: Track[], coverUrl?: string, description?: string, sourcePlaylistId?: string) => Promise<Playlist>;
+  syncImportedPlaylist: (playlistId: string, force?: boolean) => Promise<number | null>;
   deletePlaylist: (playlistId: string) => Promise<void>;
   renamePlaylist: (playlistId: string, newName: string) => Promise<void>;
   addTrackToPlaylist: (playlistId: string, track: Track) => Promise<boolean>;
@@ -110,6 +119,68 @@ function shuffledQueue(tracks: Track[], currentTrack: Track): Track[] {
 
 function firestoreSafe<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+async function syncLibraryToCloud(uid: string): Promise<void> {
+  const epoch = accountSession.generation;
+  const current = () => accountSession.isCurrent(epoch) && accountSession.uid === uid && auth.currentUser?.uid === uid;
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!current()) throw new Error('Account changed while preparing cloud sync.');
+
+  if (snap.exists()) {
+    const cloudData = snap.data();
+    const cloudFavs: Track[] = Array.isArray(cloudData.favorites) ? cloudData.favorites : [];
+    const cloudPlaylists: Playlist[] = Array.isArray(cloudData.playlists)
+      ? cloudData.playlists.filter(Boolean).map(normalizePlaylist)
+      : [];
+    const merged = mergeLibrary(useMusicStore.getState(), {
+      favorites: cloudFavs,
+      playlists: cloudPlaylists,
+      syncMeta: cloudData.syncMeta,
+    });
+    const { favorites, playlists, syncMeta } = merged;
+    useMusicStore.setState(merged);
+    await Promise.all([
+      accountStorage.setItem(STORAGE_KEYS.LIBRARY_SYNC_META, JSON.stringify(syncMeta)),
+      accountStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites)),
+      accountStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists)),
+    ]);
+    if (!current()) throw new Error('Account changed before cloud sync completed.');
+    await firestoreService.updateUser(uid, firestoreSafe({
+      favorites,
+      playlists,
+      syncMeta,
+      lastSyncedAt: Date.now(),
+    }));
+  } else {
+    const { favorites, playlists, syncMeta } = useMusicStore.getState();
+    if (!current()) throw new Error('Account changed before cloud sync completed.');
+    await firestoreService.updateUser(uid, firestoreSafe({
+      favorites,
+      playlists,
+      syncMeta,
+      lastSyncedAt: Date.now(),
+    }));
+  }
+  if (!current()) throw new Error('Account changed before cloud sync completed.');
+}
+
+async function recordLibraryMutation(type: MutationType, startSync = true): Promise<void> {
+  const { favorites, playlists, syncMeta } = useMusicStore.getState();
+  const snapshot: PendingLibrarySnapshot = firestoreSafe({ favorites, playlists, syncMeta });
+  try {
+    await syncService.enqueueLibraryMutation(type, snapshot);
+  } catch (error) {
+    logger.warn(TAG, 'Could not save library mutation for synchronization', error);
+    return;
+  }
+
+  const uid = auth.currentUser?.uid;
+  if (startSync && uid && uid === accountSession.uid && useMusicStore.getState().accountReady) {
+    void syncService.synchronize(uid, () => syncLibraryToCloud(uid)).catch((error) => {
+      logger.warn(TAG, 'Could not start library synchronization', error);
+    });
+  }
 }
 
 export const useMusicStore = create<MusicState>((set, get) => ({
@@ -216,10 +287,36 @@ export const useMusicStore = create<MusicState>((set, get) => ({
         AsyncStorage.getItem(STORAGE_KEYS.LIBRARY_SYNC_META),
       ]);
       if (!accountSession.isCurrent(epoch)) return;
-      if (metaJson) set({ syncMeta: JSON.parse(metaJson) });
-      if (favsJson) set({ favorites: JSON.parse(favsJson) });
+      const localSyncMeta = metaJson ? JSON.parse(metaJson) : { favorites: {}, deletedPlaylists: {} };
+      const localFavorites: Track[] = favsJson ? JSON.parse(favsJson) : [];
+      const localPlaylists: Playlist[] = plJson ? JSON.parse(plJson).filter(Boolean).map(normalizePlaylist) : [];
+      set({
+        syncMeta: localSyncMeta,
+        favorites: localFavorites,
+        playlists: localPlaylists,
+      });
       if (histJson) set({ history: JSON.parse(histJson) });
-      if (plJson) set({ playlists: JSON.parse(plJson).filter(Boolean).map(normalizePlaylist) });
+      const pending = await mutationQueue.load();
+      if (!accountSession.isCurrent(epoch)) return;
+      const pendingSnapshot = pending.find((mutation) => isLibraryMutationType(mutation.type))
+        ?.payload as PendingLibrarySnapshot | undefined;
+      if (
+        pendingSnapshot &&
+        Array.isArray(pendingSnapshot.favorites) &&
+        Array.isArray(pendingSnapshot.playlists) &&
+        pendingSnapshot.syncMeta
+      ) {
+        const recovered = mergeLibrary(
+          { favorites: localFavorites, playlists: localPlaylists, syncMeta: localSyncMeta },
+          pendingSnapshot,
+        );
+        set(recovered);
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.LIBRARY_SYNC_META, JSON.stringify(recovered.syncMeta)),
+          AsyncStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(recovered.favorites)),
+          AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(recovered.playlists)),
+        ]);
+      }
     } catch (e) {
       console.warn('Failed to load stored music data:', e);
     }
@@ -227,44 +324,15 @@ export const useMusicStore = create<MusicState>((set, get) => ({
 
   syncWithCloud: async (userId?: string) => {
     const uid = userId || auth.currentUser?.uid;
-    const epoch = accountSession.generation;
     if (!uid || uid !== accountSession.uid || uid !== auth.currentUser?.uid || !get().accountReady) return;
-    const current = () => accountSession.isCurrent(epoch) && auth.currentUser?.uid === uid;
-    try {
-      const userDocRef = doc(db, 'users', uid);
-      const snap = await getDoc(userDocRef);
-      if (!current()) return;
-      if (snap.exists()) {
-        const cloudData = snap.data();
-        const cloudFavs: Track[] = Array.isArray(cloudData.favorites) ? cloudData.favorites : [];
-        const cloudPlaylists: Playlist[] = Array.isArray(cloudData.playlists) ? cloudData.playlists.filter(Boolean).map(normalizePlaylist) : [];
-        const merged = mergeLibrary(get(), { favorites: cloudFavs, playlists: cloudPlaylists, syncMeta: cloudData.syncMeta });
-        const { favorites: mergedFavs, playlists: mergedPls, syncMeta } = merged;
-        set(merged);
-        await Promise.all([
-          AsyncStorage.setItem(STORAGE_KEYS.LIBRARY_SYNC_META, JSON.stringify(syncMeta)),
-          AsyncStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(mergedFavs)),
-          AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(mergedPls)),
-        ]);
-        if (!current()) return;
-        await firestoreService.updateUser(uid, firestoreSafe({ favorites: mergedFavs, playlists: mergedPls, syncMeta, lastSyncedAt: Date.now() }));
-      } else {
-        if (!current()) return;
-        await firestoreService.updateUser(uid, firestoreSafe({ favorites: get().favorites, syncMeta: get().syncMeta, playlists: get().playlists, lastSyncedAt: Date.now() }));
-      }
-    } catch (err) {
-      console.warn('Firebase Cloud sync error:', err);
-    }
+    await recordLibraryMutation('LIBRARY_SYNC', false);
+    await syncService.synchronize(uid, () => syncLibraryToCloud(uid));
   },
 
   pushCloudData: async () => {
     const uid = auth.currentUser?.uid;
     if (!uid || uid !== accountSession.uid || !get().accountReady) return;
-    try {
-      await firestoreService.updateUser(uid, firestoreSafe({ favorites: get().favorites, syncMeta: get().syncMeta, playlists: get().playlists, lastSyncedAt: Date.now() }));
-    } catch (err) {
-      console.warn('pushCloudData error:', err);
-    }
+    await get().syncWithCloud(uid);
   },
 
   playTrack: async (track, newQueue, remote = false) => {
@@ -517,7 +585,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     void AsyncStorage.setItem(STORAGE_KEYS.LIBRARY_SYNC_META, JSON.stringify(syncMeta));
     if (!exists) void tasteProfileService.record('LIKE', track.artist || track.artistName, undefined, track.id);
     AsyncStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(updated)).catch(() => {});
-    get().pushCloudData().catch(() => {});
+    void recordLibraryMutation(exists ? 'UNLIKE' : 'LIKE');
   },
 
   openFullPlayer: () => set({ isFullPlayerOpen: true }),
@@ -540,11 +608,11 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const updated = [newPlaylist, ...get().playlists];
     set({ playlists: updated });
     await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-    if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+    if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_CREATE');
     return newPlaylist.id;
   },
 
-  importPlaylist: async (name, tracks, coverUrl, description) => {
+  importPlaylist: async (name, tracks, coverUrl, description, sourcePlaylistId) => {
     const epoch = accountSession.generation;
     const totalDuration = tracks.reduce((acc, t) => acc + (t.duration || 0), 0);
     const newPlaylist: Playlist = {
@@ -557,14 +625,61 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       trackCount: tracks.length,
       totalDuration,
       coverUrl,
+      sourcePlaylistId,
+      lastSourceSyncAt: sourcePlaylistId ? Date.now() : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
     const updated = [newPlaylist, ...get().playlists];
     set({ playlists: updated });
     await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-    if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+    if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_CREATE');
     return newPlaylist;
+  },
+
+  syncImportedPlaylist: async (playlistId, force = false) => {
+    const runningSync = importedPlaylistSyncs.get(playlistId);
+    if (runningSync) return runningSync;
+    const playlist = get().playlists.find(item => item.id === playlistId);
+    if (!playlist?.sourcePlaylistId) return null;
+    const now = Date.now();
+    if (!force && playlist.lastSourceSyncAt && now - playlist.lastSourceSyncAt < 15 * 60 * 1000) return 0;
+
+    const syncTask = (async () => {
+      const epoch = accountSession.generation;
+      const sourcePlaylistId = playlist.sourcePlaylistId!;
+      const imported = await YouTubeService.getPlaylist(sourcePlaylistId);
+      if (!imported || !accountSession.isCurrent(epoch)) return null;
+
+      const current = get().playlists.find(item => item.id === playlistId);
+      if (!current || current.sourcePlaylistId !== sourcePlaylistId) return null;
+      const currentIds = new Set(current.tracks.map(track => track.id));
+      const additions = imported.tracks.filter(track => !currentIds.has(track.id));
+      const tracks = additions.length ? [...current.tracks, ...additions] : current.tracks;
+      const updatedPlaylist: Playlist = {
+        ...current,
+        tracks,
+        trackCount: tracks.length,
+        totalDuration: tracks.reduce((sum, track) => sum + (track.duration || 0), 0),
+        lastSourceSyncAt: Date.now(),
+        updatedAt: additions.length ? Date.now() : current.updatedAt,
+      };
+      const updated = get().playlists.map(item => item.id === playlistId ? updatedPlaylist : item);
+      const activeDetail = get().activePlaylistDetail;
+      set({
+        playlists: updated,
+        activePlaylistDetail: activeDetail?.id === playlistId ? updatedPlaylist : activeDetail,
+      });
+      await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
+      if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_UPDATE');
+      return additions.length;
+    })();
+    importedPlaylistSyncs.set(playlistId, syncTask);
+    try {
+      return await syncTask;
+    } finally {
+      if (importedPlaylistSyncs.get(playlistId) === syncTask) importedPlaylistSyncs.delete(playlistId);
+    }
   },
 
   deletePlaylist: async (playlistId) => {
@@ -580,7 +695,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       activePlaylistDetail: activeDetail?.id === playlistId ? null : activeDetail,
     });
     await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-    if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+    if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_DELETE');
   },
 
   renamePlaylist: async (playlistId, newName) => {
@@ -592,7 +707,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       activePlaylistDetail: activeDetail?.id === playlistId ? { ...activeDetail, name: newName.trim(), updatedAt: Date.now() } : activeDetail,
     });
     await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-    if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+    if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_RENAME');
   },
 
   addTrackToPlaylist: async (playlistId, track) => {
@@ -620,13 +735,15 @@ export const useMusicStore = create<MusicState>((set, get) => ({
         activePlaylistDetail: activeDetail?.id === playlistId ? updated.find((p) => p.id === playlistId) ?? null : activeDetail,
       });
       await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-      if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+      if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_ADD');
     }
     return trackAdded;
   },
 
   removeTrackFromPlaylist: async (playlistId, trackId) => {
     const epoch = accountSession.generation;
+    const initialPlaylist = get().playlists.find((playlist) => playlist.id === playlistId);
+    if (!initialPlaylist?.tracks.some((track) => track.id === trackId)) return;
     const updated = get().playlists.map((p) => {
       if (p.id === playlistId) {
         const removedTrack = p.tracks.find((t) => t.id === trackId);
@@ -648,7 +765,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       activePlaylistDetail: activeDetail?.id === playlistId ? updated.find((p) => p.id === playlistId) ?? null : activeDetail,
     });
     await AsyncStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(updated));
-    if (accountSession.isCurrent(epoch)) get().pushCloudData().catch(() => {});
+    if (accountSession.isCurrent(epoch)) await recordLibraryMutation('PLAYLIST_REMOVE');
   },
 
   openActionSheet: (track) => set({ activeActionSong: track, isActionSheetOpen: true }),

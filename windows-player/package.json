@@ -8,14 +8,18 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:windows": "electron-builder --win nsis --x64"
+    "build:windows": "electron-builder --win nsis --x64",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "bgutils-js": "^4.0.3",
     "jsdom": "^26.1.0",
-    "youtubei.js": "^18.1.0"
+    "youtubei.js": "^18.3.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "electron": "44.4.5",
     "electron-builder": "26.15.3"
   },
@@ -43,7 +47,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "Voxen-Setup-${version}-Windows-x64.${ext}"

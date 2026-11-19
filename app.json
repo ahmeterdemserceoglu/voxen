@@ -2,8 +2,8 @@
   "expo": {
     "name": "voxen",
     "slug": "voxen",
-    "version": "1.0.5",
-    "orientation": "portrait",
+    "version": "1.0.7",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.voxen.music",
-      "versionCode": 6,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#FAFAF9",
@@ -35,6 +35,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-image",
       "expo-audio"
     ]

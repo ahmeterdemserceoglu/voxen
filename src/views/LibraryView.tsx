@@ -11,7 +11,7 @@ import {
   TextInput,
   Modal,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   ActivityIndicator,
   Keyboard,
   Platform,
@@ -32,11 +32,9 @@ import { KeyboardAvoidModal } from '../components/KeyboardAvoidModal';
 import { accountSession } from '../services/auth/accountStorage';
 import { Colors } from '../constants/theme';
 
-const { width: screenWidth } = Dimensions.get('window');
 const IS_DESKTOP = Platform.OS === 'web' && process.env.EXPO_PUBLIC_VOXEN_DESKTOP === '1';
 const GRID_SPACING = 12;
-const HORIZONTAL_PADDING = 16;
-const CARD_WIDTH = IS_DESKTOP ? 210 : Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - GRID_SPACING) / 2);
+const HORIZONTAL_PADDING = IS_DESKTOP ? 32 : 16;
 
 type SubTabKey = 'all' | 'playlists' | 'favorites' | 'downloads' | 'artists' | 'albums' | 'history';
 type ViewMode = 'grid' | 'list';
@@ -45,6 +43,11 @@ type SortOrder = 'recent' | 'alphabetical' | 'tracks';
 export const LibraryView: React.FC = () => {
   const Colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
+  const { width: screenWidth } = useWindowDimensions();
+  const gridColumns = screenWidth >= 900 ? 5 : screenWidth >= 600 ? 4 : 2;
+  const cardWidth = IS_DESKTOP
+    ? 210
+    : Math.floor((screenWidth - HORIZONTAL_PADDING * 2 - GRID_SPACING * (gridColumns - 1)) / gridColumns);
   const insets = useSafeAreaInsets();
   const [activeSubTab, setActiveSubTab] = useState<SubTabKey>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -150,7 +153,8 @@ export const LibraryView: React.FC = () => {
         playlistTitle,
         result.tracks,
         result.thumbnailUrl,
-        `YouTube üzerinden içe aktarıldı (${result.author || ''})`
+        `YouTube üzerinden içe aktarıldı (${result.author || ''})`,
+        result.id
       );
 
       setIsImporting(false);
@@ -268,18 +272,18 @@ export const LibraryView: React.FC = () => {
   const renderLikedSongsGridCard = () => (
     <TouchableOpacity
       key="liked-songs-grid"
-      style={[styles.gridCard, { width: CARD_WIDTH }]}
+      style={[styles.gridCard, { width: cardWidth }]}
       activeOpacity={0.82}
       onPress={() => setActiveSubTab('favorites')}
     >
-      <View style={[styles.gridThumbContainer, { width: CARD_WIDTH, height: CARD_WIDTH }]}>
+      <View style={[styles.gridThumbContainer, { width: cardWidth, height: cardWidth }]}>
         <LinearGradient
           colors={['#7E1D2D', '#D61A24']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.likedSongsGradient}
         >
-          <Ionicons name="heart" size={CARD_WIDTH * 0.35} color="#FFFFFF" />
+          <Ionicons name="heart" size={cardWidth * 0.35} color="#FFFFFF" />
           {favorites.length > 0 && (
             <TouchableOpacity
               style={styles.gridPlayFloatingBtn}
@@ -296,12 +300,9 @@ export const LibraryView: React.FC = () => {
         </LinearGradient>
       </View>
       <View style={styles.gridMeta}>
-        <View style={styles.pinnedRow}>
-          <Ionicons name="pin" size={11} color={Colors.primary} style={{ marginRight: 4 }} />
-          <Text style={styles.gridCardTitle} numberOfLines={1}>
-            Beğenilen Şarkılar
-          </Text>
-        </View>
+        <Text style={styles.gridCardTitle} numberOfLines={1}>
+          Beğenilen Şarkılar
+        </Text>
         <Text style={styles.gridCardSub} numberOfLines={1}>
           Çalma Listesi • {favorites.length} parça
         </Text>
@@ -313,18 +314,18 @@ export const LibraryView: React.FC = () => {
   const renderDownloadedSongsGridCard = () => (
     <TouchableOpacity
       key="downloaded-songs-grid"
-      style={[styles.gridCard, { width: CARD_WIDTH }]}
+      style={[styles.gridCard, { width: cardWidth }]}
       activeOpacity={0.82}
       onPress={() => setActiveSubTab('downloads')}
     >
-      <View style={[styles.gridThumbContainer, { width: CARD_WIDTH, height: CARD_WIDTH }]}>
+      <View style={[styles.gridThumbContainer, { width: cardWidth, height: cardWidth }]}>
         <LinearGradient
           colors={['#7E1D2D', '#D61A24']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.likedSongsGradient}
         >
-          <Ionicons name="arrow-down-circle" size={CARD_WIDTH * 0.35} color="#FFFFFF" />
+          <Ionicons name="arrow-down-circle" size={cardWidth * 0.35} color="#FFFFFF" />
           {downloadedTracks.length > 0 && (
             <TouchableOpacity
               style={[styles.gridPlayFloatingBtn, { backgroundColor: Colors.primary }]}
@@ -341,12 +342,9 @@ export const LibraryView: React.FC = () => {
         </LinearGradient>
       </View>
       <View style={styles.gridMeta}>
-        <View style={styles.pinnedRow}>
-          <Ionicons name="pin" size={11} color={Colors.primary} style={{ marginRight: 4 }} />
-          <Text style={styles.gridCardTitle} numberOfLines={1}>
-            İndirilenler
-          </Text>
-        </View>
+        <Text style={styles.gridCardTitle} numberOfLines={1}>
+          İndirilenler
+        </Text>
         <Text style={styles.gridCardSub} numberOfLines={1}>
           Çalma Listesi • {downloadedTracks.length} parça
         </Text>
@@ -358,11 +356,11 @@ export const LibraryView: React.FC = () => {
   const renderAddPlaylistGridCard = () => (
     <TouchableOpacity
       key="add-playlist-grid"
-      style={[styles.gridCard, { width: CARD_WIDTH }]}
+      style={[styles.gridCard, { width: cardWidth }]}
       activeOpacity={0.78}
       onPress={() => setIsNewPlaylistModalOpen(true)}
     >
-      <View style={[styles.gridThumbContainer, styles.addPlaylistContainer, { width: CARD_WIDTH, height: CARD_WIDTH }]}>
+      <View style={[styles.gridThumbContainer, styles.addPlaylistContainer, { width: cardWidth, height: cardWidth }]}>
         <View style={styles.addPlaylistIconBox}>
           <Ionicons name="add" size={32} color="#FFFFFF" />
         </View>
@@ -384,12 +382,12 @@ export const LibraryView: React.FC = () => {
     return (
       <TouchableOpacity
         key={playlist.id}
-        style={[styles.gridCard, { width: CARD_WIDTH }]}
+        style={[styles.gridCard, { width: cardWidth }]}
         activeOpacity={0.82}
         onPress={() => openPlaylistDetail(playlist)}
       >
-        <View style={[styles.gridThumbContainer, { width: CARD_WIDTH, height: CARD_WIDTH }]}>
-          <PlaylistCollageThumb playlist={playlist} size={CARD_WIDTH} borderRadius={10} />
+        <View style={[styles.gridThumbContainer, { width: cardWidth, height: cardWidth }]}>
+          <PlaylistCollageThumb playlist={playlist} size={cardWidth} borderRadius={10} />
           {tracksCount > 0 && (
             <TouchableOpacity
               style={styles.gridPlayFloatingBtn}
@@ -667,11 +665,8 @@ export const LibraryView: React.FC = () => {
           >
             {viewMode === 'grid' ? (
               <View style={styles.gridContainer}>
-                {/* 1. Liked Songs Card */}
-                {renderLikedSongsGridCard()}
-
-                {/* 2. Downloaded Songs Card */}
-                {renderDownloadedSongsGridCard()}
+                {activeSubTab === 'all' && renderLikedSongsGridCard()}
+                {activeSubTab === 'all' && renderDownloadedSongsGridCard()}
 
                 {/* 3. Add New Playlist Card */}
                 {renderAddPlaylistGridCard()}
@@ -681,8 +676,8 @@ export const LibraryView: React.FC = () => {
               </View>
             ) : (
               <View style={styles.listContainer}>
-                {/* Liked songs list row */}
-                <TouchableOpacity
+                {/* Liked songs row belongs to the All view. */}
+                {activeSubTab === 'all' && <TouchableOpacity
                   style={styles.listRow}
                   activeOpacity={0.75}
                   onPress={() => setActiveSubTab('favorites')}
@@ -709,10 +704,9 @@ export const LibraryView: React.FC = () => {
                       <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginLeft: 2 }} />
                     </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+                </TouchableOpacity>}
 
-                {/* Downloaded songs list row */}
-                {renderDownloadedSongsListRow()}
+                {activeSubTab === 'all' && renderDownloadedSongsListRow()}
 
                 {/* User playlists rows */}
                 {filteredPlaylists.map((p) => renderPlaylistListRow(p))}
@@ -902,11 +896,15 @@ export const LibraryView: React.FC = () => {
                   {filteredArtists.map((artist) => (
                     <TouchableOpacity
                       key={artist.id}
-                      style={styles.artistCard}
+                      style={[styles.artistCard, { width: cardWidth }]}
                       activeOpacity={0.8}
                       onPress={() => openArtist(artist.name)}
                     >
-                      <View style={styles.artistAvatarWrap}>
+                      <View style={[styles.artistAvatarWrap, {
+                        width: cardWidth * 0.8,
+                        height: cardWidth * 0.8,
+                        borderRadius: (cardWidth * 0.8) / 2,
+                      }]}>
                         {artist.thumbnailUrl ? (
                           <Image
                             source={{ uri: artist.thumbnailUrl }}
@@ -1081,7 +1079,7 @@ export const LibraryView: React.FC = () => {
           onPress={() => setIsLibraryMenuOpen(false)}
         >
           <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, 20) + 12 }]}>
-            <View style={styles.menuHandle} />
+            {!IS_DESKTOP && <View style={styles.menuHandle} />}
             <Text style={styles.menuSheetTitle}>Kütüphane İşlemleri</Text>
 
             <TouchableOpacity
@@ -1223,7 +1221,7 @@ export const LibraryView: React.FC = () => {
 const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#070708',
+    backgroundColor: Colors.background,
   },
   topHeader: {
     flexDirection: 'row',
@@ -1239,7 +1237,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   screenTitle: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: -0.5,
   },
   headerRightActions: {
@@ -1261,21 +1259,21 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   searchBarWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161619',
+    backgroundColor: Colors.surface,
     marginHorizontal: HORIZONTAL_PADDING,
     marginBottom: 12,
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 40,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: Colors.border,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: Colors.text,
     fontSize: 14,
     height: '100%',
   },
@@ -1292,7 +1290,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: Colors.surfaceElevated,
   },
   chipActive: {
     backgroundColor: '#FFFFFF',
@@ -1300,7 +1298,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   chipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   chipTextActive: {
     color: '#070708',
@@ -1320,13 +1318,13 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   sortText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: 0.2,
   },
   viewModeGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: 8,
     padding: 2,
   },
@@ -1336,14 +1334,14 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderRadius: 6,
   },
   viewModeBtnActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    backgroundColor: Colors.surfaceHighlight,
   },
   contentArea: {
     flex: 1,
   },
   scrollPadding: {
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingBottom: 170,
+    paddingBottom: IS_DESKTOP ? 150 : 170,
   },
   gridContainer: {
     flexDirection: 'row',
@@ -1356,7 +1354,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   gridThumbContainer: {
     borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#161619',
+    backgroundColor: Colors.surface,
     position: 'relative',
   },
   likedSongsGradient: {
@@ -1400,10 +1398,6 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   gridMeta: {
     marginTop: 8,
   },
-  pinnedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   gridCardTitle: {
     fontSize: 13,
     fontWeight: '700',
@@ -1437,7 +1431,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   listRowTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   listRowSub: {
     fontSize: 12,
@@ -1462,7 +1456,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   subtabHeroTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   subtabHeroCount: {
     fontSize: 12,
@@ -1588,14 +1582,10 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     gap: GRID_SPACING,
   },
   artistCard: {
-    width: CARD_WIDTH,
     alignItems: 'center',
     marginBottom: 18,
   },
   artistAvatarWrap: {
-    width: CARD_WIDTH * 0.8,
-    height: CARD_WIDTH * 0.8,
-    borderRadius: (CARD_WIDTH * 0.8) / 2,
     overflow: 'hidden',
     backgroundColor: '#161619',
     marginBottom: 8,
@@ -1745,16 +1735,26 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   menuBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
+    justifyContent: IS_DESKTOP ? 'center' : 'flex-end',
+    alignItems: IS_DESKTOP ? 'center' : undefined,
   },
   menuSheet: {
-    backgroundColor: '#161619',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: IS_DESKTOP ? 20 : 24,
+    borderTopRightRadius: IS_DESKTOP ? 20 : 24,
+    borderBottomLeftRadius: IS_DESKTOP ? 20 : undefined,
+    borderBottomRightRadius: IS_DESKTOP ? 20 : undefined,
     paddingHorizontal: 20,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: IS_DESKTOP ? 1 : undefined,
+    borderTopWidth: IS_DESKTOP ? undefined : 1,
+    borderColor: IS_DESKTOP ? Colors.borderLight : Colors.border,
+    width: IS_DESKTOP ? 440 : undefined,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.55,
+    shadowRadius: 32,
+    elevation: 24,
   },
   menuHandle: {
     width: 36,
@@ -1767,7 +1767,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   menuSheetTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Colors.text,
     marginBottom: 14,
     textAlign: 'center',
   },
@@ -1793,7 +1793,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   menuItemTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   menuItemSub: {
     fontSize: 12,

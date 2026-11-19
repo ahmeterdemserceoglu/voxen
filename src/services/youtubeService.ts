@@ -234,18 +234,25 @@ export class YouTubeService {
       for (const section of sectionList) {
         if (section.musicCardShelfRenderer) {
           const card = section.musicCardShelfRenderer;
-          artistName = card.title?.runs?.[0]?.text || artistName;
-          const thumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.pop()?.url;
-          if (thumb) thumbnailUrl = thumb.replace(/=w\d+-h\d+/, '=w500-h500');
-          browseId = card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
-          const sub = card.subtitle?.runs?.map((r: any) => r.text).join('') || '';
-          const match =
-            sub.match(/Aylık kitle:\s*([^•\n]+)/i) ||
-            sub.match(/([0-9,.]+\s*(?:Mn|B|Mr|M|K)?\s*dinleyici)/i);
-          if (match) {
-            monthlyListeners = match[1].trim();
+          const cardPageType =
+            card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType;
+          const isArtistCard = cardPageType === 'MUSIC_PAGE_TYPE_ARTIST' ||
+            card.subtitle?.runs?.some((r: any) => /sanatçı|artist/i.test(r.text));
+
+          if (isArtistCard && cardPageType === 'MUSIC_PAGE_TYPE_ARTIST') {
+            artistName = card.title?.runs?.[0]?.text || artistName;
+            const thumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.pop()?.url;
+            if (thumb) thumbnailUrl = thumb.replace(/=w\d+-h\d+/, '=w500-h500');
+            browseId = card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+            const sub = card.subtitle?.runs?.map((r: any) => r.text).join('') || '';
+            const match =
+              sub.match(/Aylık kitle:\s*([^•\n]+)/i) ||
+              sub.match(/([0-9,.]+\s*(?:Mn|B|Mr|M|K)?\s*dinleyici)/i);
+            if (match) {
+              monthlyListeners = match[1].trim();
+            }
+            break;
           }
-          break;
         }
 
         if (section.musicShelfRenderer) {
@@ -665,15 +672,39 @@ export class YouTubeService {
       for (const section of sectionList) {
         if (section.musicCardShelfRenderer) {
           const card = section.musicCardShelfRenderer;
-          const name = card.title?.runs?.[0]?.text;
-          const thumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.pop()?.url;
-          if (name && thumb) {
-            results.push({
-              id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-              name,
-              genre: 'Sanatçı',
-              thumbnailUrl: thumb.replace(/=w\d+-h\d+/, '=w500-h500'),
-            });
+          const pageType =
+            card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType;
+          const isArtist =
+            pageType === 'MUSIC_PAGE_TYPE_ARTIST' ||
+            card.subtitle?.runs?.some((r: any) => /sanatçı|artist/i.test(r.text));
+
+          if (isArtist && pageType === 'MUSIC_PAGE_TYPE_ARTIST') {
+            const name = card.title?.runs?.[0]?.text;
+            const thumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.pop()?.url;
+            if (name && thumb) {
+              results.push({
+                id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                name,
+                genre: 'Sanatçı',
+                thumbnailUrl: thumb.replace(/=w\d+-h\d+/, '=w500-h500'),
+              });
+            }
+          } else {
+            const artistRun = card.subtitle?.runs?.find((r: any) =>
+              r.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType === 'MUSIC_PAGE_TYPE_ARTIST'
+            );
+            if (artistRun?.text) {
+              const name = artistRun.text.trim();
+              const thumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.pop()?.url;
+              if (thumb && !results.some((x) => x.name.toLowerCase() === name.toLowerCase())) {
+                results.push({
+                  id: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                  name,
+                  genre: 'Sanatçı',
+                  thumbnailUrl: thumb.replace(/=w\d+-h\d+/, '=w500-h500'),
+                });
+              }
+            }
           }
         }
         if (section.musicShelfRenderer) {

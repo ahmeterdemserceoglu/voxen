@@ -62,9 +62,9 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     width: 238,
     flexShrink: 0,
-    backgroundColor: '#0D0D0F',
+    backgroundColor: Colors.sidebar,
     borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.07)',
+    borderRightColor: Colors.border,
     paddingHorizontal: 18,
     paddingTop: 28,
     paddingBottom: 18,

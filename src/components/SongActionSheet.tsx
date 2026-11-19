@@ -237,7 +237,7 @@ export const SongActionSheet: React.FC = () => {
                   onPress={() => openAddToPlaylist(activeActionSong)}
                 >
                   <View style={styles.actionIconWrapper}>
-                    <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
+                    <Ionicons name="add-circle-outline" size={22} color={Colors.text} />
                   </View>
                   <Text style={styles.actionText}>Çalma Listesine Ekle</Text>
                   <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
@@ -313,7 +313,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={handlePlayNext}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="play-forward-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="play-forward-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>Sonraki Çal</Text>
               </TouchableOpacity>
@@ -325,7 +325,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={handleAddToQueue}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="list-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="list-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>Sıraya Ekle</Text>
               </TouchableOpacity>
@@ -337,7 +337,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={handleViewArtist}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="person-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="person-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>Sanatçıyı Görüntüle</Text>
               </TouchableOpacity>
@@ -350,7 +350,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={() => { void albumNavigation.open(); }}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="disc-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="disc-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>{albumNavigation.loading ? "Albüm bulunuyor…" : "Albümü Görüntüle"}</Text>
               </TouchableOpacity>
@@ -362,7 +362,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={handleStartRadio}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="radio-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="radio-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>Şarkı Radyosunu Başlat</Text>
               </TouchableOpacity>
@@ -374,7 +374,7 @@ export const SongActionSheet: React.FC = () => {
                 onPress={handleShare}
               >
                 <View style={styles.actionIconWrapper}>
-                  <Ionicons name="share-social-outline" size={22} color="#FFFFFF" />
+                  <Ionicons name="share-social-outline" size={22} color={Colors.text} />
                 </View>
                 <Text style={styles.actionText}>Paylaş</Text>
               </TouchableOpacity>
@@ -404,7 +404,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     alignItems: IS_DESKTOP ? 'center' : 'stretch',
   },
   sheetContainer: {
-    backgroundColor: '#161618',
+    backgroundColor: Colors.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 20,
@@ -416,7 +416,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: Colors.borderLight,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.6,
@@ -453,7 +453,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   songTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: Colors.text,
     letterSpacing: -0.2,
   },
   songArtist: {
@@ -476,7 +476,7 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
+    backgroundColor: Colors.surfaceHighlight,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -488,14 +488,14 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.text,
   },
   actionTextFavActive: {
     color: Colors.primary,
   },
   cancelBtn: {
     marginTop: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: Colors.surfaceElevated,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',

@@ -10,6 +10,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useThemeColors, useThemeStyles, type Palette } from '../utils/useTheme';
 
 interface KeyboardAvoidModalProps {
   visible: boolean;
@@ -30,6 +31,8 @@ export const KeyboardAvoidModal: React.FC<KeyboardAvoidModalProps> = ({
   backdropStyle,
   statusBarTranslucent = true,
 }) => {
+  const Colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -86,7 +89,7 @@ export const KeyboardAvoidModal: React.FC<KeyboardAvoidModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (Colors: Palette) => StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.78)',
@@ -97,12 +100,12 @@ const styles = StyleSheet.create({
   dialogCard: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: '#161619',
+    backgroundColor: Colors.surface,
     borderRadius: 22,
     padding: 22,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: Colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.5,

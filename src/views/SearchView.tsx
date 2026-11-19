@@ -174,11 +174,42 @@ export const SearchView: React.FC = () => {
         setAlbumResults(albums);
         setAlbumSearchError(albumsRes.status === 'rejected');
 
-        if (artists.length > 0) {
-          setMatchedArtist(artists[0]);
-        } else {
-          setMatchedArtist(null);
+        const topSongArtist = tracks[0]?.artist?.trim();
+        let targetArtist: ArtistResultItem | null = null;
+
+        if (topSongArtist && topSongArtist !== 'Bilinmeyen Sanatçı') {
+          const found = artists.find(
+            (a) =>
+              a.name.toLowerCase() === topSongArtist.toLowerCase() ||
+              topSongArtist.toLowerCase().includes(a.name.toLowerCase()) ||
+              a.name.toLowerCase().includes(topSongArtist.toLowerCase())
+          );
+
+          if (found) {
+            targetArtist = found;
+          } else {
+            targetArtist = {
+              id: topSongArtist.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+              name: topSongArtist,
+              genre: 'Sanatçı',
+              thumbnailUrl: trackArtwork(tracks[0]) || '',
+            };
+
+            YouTubeService.getArtistProfile(topSongArtist).then((profile) => {
+              if (request === searchRequest.current && profile?.thumbnailUrl) {
+                setMatchedArtist((prev) =>
+                  prev && prev.name.toLowerCase() === topSongArtist.toLowerCase()
+                    ? { ...prev, thumbnailUrl: profile.thumbnailUrl }
+                    : prev
+                );
+              }
+            }).catch(() => {});
+          }
+        } else if (artists.length > 0) {
+          targetArtist = artists[0];
         }
+
+        setMatchedArtist(targetArtist);
       } else if (currentTab === 'songs') {
         const tracks = await YouTubeService.search(q);
         if (request !== searchRequest.current) return;
@@ -231,6 +262,23 @@ export const SearchView: React.FC = () => {
     setMatchedArtist(null);
   };
 
+  // Masaüstünde öneriler açıkken: Escape ile kapat, dışına tıklayınca kapat.
+  const searchWrapRef = useRef<any>(null);
+  useEffect(() => {
+    if (!IS_DESKTOP || suggestions.length === 0) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setSuggestions([]); };
+    const onPointerDown = (e: MouseEvent) => {
+      const node = searchWrapRef.current as unknown as HTMLElement | null;
+      if (node && e.target instanceof Node && !node.contains(e.target)) setSuggestions([]);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [suggestions.length]);
+
   const topResult = results[0];
   const remainingResults = results.slice(1);
 
@@ -240,7 +288,7 @@ export const SearchView: React.FC = () => {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : IS_DESKTOP ? undefined : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
     <View style={[styles.container, { paddingTop: IS_DESKTOP ? 30 : (insets.top || 16) + 12 }]}>
@@ -250,42 +298,43 @@ export const SearchView: React.FC = () => {
         <Text style={styles.subTitle}>Milyonlarca şarkı ve sanatçı parmaklarınızın ucunda</Text>
       </View>
 
-      {/* Capsule Search Input */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={20} color={Colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.input}
-          placeholder="Şarkı, sanatçı veya albüm ara..."
-          placeholderTextColor="#666"
-          value={query}
-          onChangeText={handleQueryChange}
-          onSubmitEditing={() => handleSearch(query)}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoFocus={IS_DESKTOP}
-        />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
+      {/* Capsule Search Input + Live Suggestions (overlay) */}
+      <View style={styles.searchWrap} ref={searchWrapRef}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={Colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Şarkı, sanatçı veya albüm ara..."
+            placeholderTextColor="#666"
+            value={query}
+            onChangeText={handleQueryChange}
+            onSubmitEditing={() => handleSearch(query)}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoFocus={IS_DESKTOP}
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {suggestions.length > 0 && (
+          <View style={styles.suggestionsCard}>
+            {suggestions.slice(0, 5).map((sugg, idx) => (
+              <TouchableOpacity
+                key={`${sugg}-${idx}`}
+                style={styles.suggestionItem}
+                onPress={() => handleSearch(sugg)}
+              >
+                <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
+                <Text style={styles.suggestionText}>{sugg}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
       </View>
-
-      {/* Live Suggestions Dropdown */}
-      {suggestions.length > 0 && (
-        <View style={styles.suggestionsCard}>
-          {suggestions.slice(0, 5).map((sugg, idx) => (
-            <TouchableOpacity
-              key={`${sugg}-${idx}`}
-              style={styles.suggestionItem}
-              onPress={() => handleSearch(sugg)}
-            >
-              <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
-              <Text style={styles.suggestionText}>{sugg}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
 
       {/* Filter Tabs when results are present */}
       {hasResults && (
@@ -430,7 +479,7 @@ export const SearchView: React.FC = () => {
                 {/* Matched Artist Hero Card */}
                 {matchedArtist && (
                   <View style={styles.artistHeroSection}>
-                    <Text style={styles.sectionHeader}>Sanatçı Profili</Text>
+                    <Text style={styles.sectionHeader}>En İyi Sanatçı</Text>
                     <TouchableOpacity
                       style={styles.artistHeroCard}
                       activeOpacity={0.85}
@@ -543,7 +592,7 @@ export const SearchView: React.FC = () => {
                     ))}
                   </ScrollView>
                 </View>
-              ) : null
+              ) : undefined
             }
           />
         )
@@ -591,14 +640,14 @@ export const SearchView: React.FC = () => {
                     {chart.items.filter(track => !failedArtwork.has(track.id)).map((track) => (
                       <TouchableOpacity
                         key={track.id}
-                        style={{ width: 130 }}
+                        style={styles.chartCard}
                         activeOpacity={0.8}
                         onPress={() => playTrack(track, chart.items)}
                       >
                         <Image
                           source={{ uri: trackArtwork(track) }}
                           onError={() => hideArtwork(track.id)}
-                          style={{ width: 130, height: 130, borderRadius: 12, backgroundColor: Colors.card }}
+                          style={styles.chartCover}
                           contentFit="cover"
                         />
                         <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.text, marginTop: 6 }} numberOfLines={1}>
@@ -665,7 +714,10 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingHorizontal: IS_DESKTOP ? 24 : 16,
+    paddingHorizontal: IS_DESKTOP ? 32 : 16,
+  },
+  searchWrap: {
+    zIndex: 60,
   },
   header: {
     marginBottom: 16,
@@ -700,13 +752,22 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     fontSize: 15,
   },
   suggestionsCard: {
+    position: IS_DESKTOP ? 'absolute' as const : 'relative' as const,
+    top: IS_DESKTOP ? 54 : undefined,
+    left: IS_DESKTOP ? 0 : undefined,
+    right: IS_DESKTOP ? 0 : undefined,
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    marginTop: 8,
+    marginTop: IS_DESKTOP ? 0 : 8,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
     zIndex: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 12,
   },
   suggestionItem: {
     flexDirection: 'row',
@@ -802,11 +863,11 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   artistHeroCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181C',
+    backgroundColor: Colors.surface,
     padding: 14,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: Colors.borderLight,
   },
   artistHeroAvatar: {
     width: 64,
@@ -967,12 +1028,12 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     paddingRight: 20,
   },
   albumHorizontalCard: {
-    width: 120,
+    width: IS_DESKTOP ? 160 : 120,
     marginRight: 12,
   },
   albumHorizontalThumb: {
-    width: 120,
-    height: 120,
+    width: '100%',
+    height: IS_DESKTOP ? 160 : 120,
     borderRadius: 10,
     marginBottom: 6,
   },
@@ -1000,7 +1061,16 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
   },
   listContent: {
     paddingTop: 10,
-    paddingBottom: 170,
+    paddingBottom: IS_DESKTOP ? 150 : 170,
+  },
+  chartCard: {
+    width: IS_DESKTOP ? 170 : 130,
+  },
+  chartCover: {
+    width: '100%',
+    height: IS_DESKTOP ? 170 : 130,
+    borderRadius: 12,
+    backgroundColor: Colors.card,
   },
   browseScroll: {
     flex: 1,
@@ -1070,8 +1140,8 @@ const createStyles = (Colors: Palette) => StyleSheet.create({
     rowGap: 12,
   },
   categoryCard: {
-    width: '48%',
-    height: 90,
+    width: IS_DESKTOP ? '23.5%' : '48%',
+    height: IS_DESKTOP ? 110 : 90,
     borderRadius: 14,
     padding: 14,
     justifyContent: 'space-between',

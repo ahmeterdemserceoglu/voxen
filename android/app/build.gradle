@@ -94,10 +94,11 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion 36
         testInstrumentationRunner "com.voxen.music.playback.PlaybackInstrumentation"
-        versionCode 6
-        versionName "1.0.5"
+        versionCode 8
+        versionName "1.0.7"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+
     }
     signingConfigs {
         debug {
@@ -107,29 +108,33 @@ android {
             keyPassword 'android'
         }
         release {
+            // Only require production signing credentials when building a release.
             def releaseStoreFile = findProperty('VOXEN_RELEASE_STORE_FILE')
             def releaseStorePassword = findProperty('VOXEN_RELEASE_STORE_PASSWORD')
             def releaseKeyAlias = findProperty('VOXEN_RELEASE_KEY_ALIAS')
             def releaseKeyPassword = findProperty('VOXEN_RELEASE_KEY_PASSWORD')
 
-            if (!releaseStoreFile || !releaseStorePassword || !releaseKeyAlias || !releaseKeyPassword) {
-                throw new GradleException('Voxen release signing properties are missing.')
-            }
+            if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+                if (!releaseStoreFile || !releaseStorePassword || !releaseKeyAlias || !releaseKeyPassword) {
+                    throw new GradleException('Voxen release signing properties are missing.')
+                }
 
-            def resolvedStoreFile = file(releaseStoreFile)
-            if (!resolvedStoreFile.exists()) {
-                throw new GradleException("Voxen release keystore not found: ${resolvedStoreFile}")
-            }
+                def resolvedStoreFile = file(releaseStoreFile)
+                if (!resolvedStoreFile.exists()) {
+                    throw new GradleException("Voxen release keystore not found: ${resolvedStoreFile}")
+                }
 
-            storeFile resolvedStoreFile
-            storePassword releaseStorePassword
-            keyAlias releaseKeyAlias
-            keyPassword releaseKeyPassword
+                storeFile resolvedStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
         }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            applicationIdSuffix ".dev"
         }
         release {
             // Caution! In production, you need to generate your own keystore file.

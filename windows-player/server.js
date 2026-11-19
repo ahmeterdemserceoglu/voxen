@@ -7,9 +7,16 @@ const { randomUUID } = require('crypto');
 const { once } = require('events');
 
 const PORT = Number(process.env.VOXEN_PLAYER_PORT || 48731);
+// Ana uygulama kapandığında (Ctrl+C, çökme veya pencere kapanması) arka planda asılı kalmaması için
+process.stdin.resume();
+process.stdin.on('end', () => process.exit(0));
+process.stdin.on('close', () => process.exit(0));
+
 const ROOT = path.resolve(process.env.VOXEN_WEB_ROOT || path.join(__dirname, 'dist'));
 const DATA_ROOT = process.env.VOXEN_DATA_ROOT || path.join(process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'), 'Voxen');
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36';
+const IOS_USER_AGENT = 'com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)';
+const ANDROID_USER_AGENT = 'com.google.android.youtube/19.29.37 (Linux; U; Android 14; US) gzip';
 const CLIENT_VERSION = '1.20240401.01.00';
 const streamCache = new Map();
 const streamRequests = new Map();
@@ -17,6 +24,15 @@ const downloadJobs = new Map();
 let innertubePromise;
 let poMinterPromise;
 let poMinterCreatedAt = 0;
+
+function getStreamUserAgent(targetUrl) {
+  try {
+    const c = new URL(targetUrl).searchParams.get('c');
+    if (c === 'IOS') return IOS_USER_AGENT;
+    if (c === 'ANDROID' || c === 'ANDROID_VR') return ANDROID_USER_AGENT;
+  } catch {}
+  return USER_AGENT;
+}
 
 function json(res, status, value) {
   res.writeHead(status, {
@@ -93,7 +109,9 @@ function publicDownload(item, owner) {
 async function getInnertube() {
   if (!innertubePromise) {
     innertubePromise = import('youtubei.js').then(({ Innertube, Platform, UniversalCache }) => {
-      Platform.shim.eval = async (data) => new Function(data.output)();
+      Platform.shim.eval = async (data, env) => {
+        return new Function(...Object.keys(env || {}), data.output)(...Object.values(env || {}));
+      };
       return Innertube.create({
         lang: 'tr', location: 'TR', generate_session_locally: true,
         retrieve_player: true, cache: new UniversalCache(false),
@@ -174,32 +192,50 @@ async function resolveAudioUncached(videoId, forceRefresh = false) {
   let format;
   let client;
   let lastError;
+
+  // 1. Birincil ve en kararlı istemci: IOS (BotGuard/PO token zorunluluğu olmadan temiz AAC akış)
   try {
-    const minter = await getPoMinter();
-    const poToken = await minter.mintAsWebsafeString(videoId);
-    const info = await youtube.getBasicInfo(videoId, { client: 'YTMUSIC' });
+    const info = await youtube.getBasicInfo(videoId, { client: 'IOS' });
     format = info.chooseFormat({ type: 'audio', quality: 'best', format: 'any' });
-    const deciphered = await format.decipher(youtube.session.player);
-    if (deciphered) { format.url = `${deciphered}&pot=${encodeURIComponent(poToken)}`; client = 'YTMUSIC_PO'; }
+    if (format?.url) client = 'IOS';
   } catch (error) {
     lastError = error;
-    console.warn('[Voxen] PO token çözümü başarısız, uyumluluk istemcileri deneniyor:', error?.message || error);
   }
-  for (const candidate of format?.url ? [] : ['ANDROID_VR', 'IOS']) {
+
+  // 2. İkincil istemci: YTMUSIC (PO minter ile)
+  if (!format?.url) {
     try {
-      format = await youtube.getStreamingData(videoId, {
-        client: candidate,
-        type: 'audio',
-        quality: 'best',
-        format: 'any',
-      });
-      if (format?.url) { client = candidate; break; }
-    } catch (error) { lastError = error; }
+      const minter = await getPoMinter();
+      const poToken = await minter.mintAsWebsafeString(videoId);
+      const info = await youtube.getBasicInfo(videoId, { client: 'YTMUSIC' });
+      format = info.chooseFormat({ type: 'audio', quality: 'best', format: 'any' });
+      const deciphered = await format.decipher(youtube.session.player);
+      if (deciphered) { format.url = `${deciphered}&pot=${encodeURIComponent(poToken)}`; client = 'YTMUSIC_PO'; }
+    } catch (error) {
+      lastError = error;
+      console.warn('[Voxen] PO token çözümü başarısız, uyumluluk istemcileri deneniyor:', error?.message || error);
+    }
   }
+
+  // 3. Yedek istemciler
+  if (!format?.url) {
+    for (const candidate of ['ANDROID_VR', 'WEB']) {
+      try {
+        format = await youtube.getStreamingData(videoId, {
+          client: candidate,
+          type: 'audio',
+          quality: 'best',
+          format: 'any',
+        });
+        if (format?.url) { client = candidate; break; }
+      } catch (error) { lastError = error; }
+    }
+  }
+
   if (!format?.url) throw lastError || new Error('Oynatılabilir ses akışı bulunamadı');
   const result = {
     url: format.url,
-    mime: String(format.mime_type || 'audio/webm').split(';')[0],
+    mime: String(format.mime_type || 'audio/mp4').split(';')[0],
     bitrate: format.bitrate || format.average_bitrate,
     loudnessDb: format.loudness_db,
     client,
@@ -241,13 +277,13 @@ async function proxyAudio(req, res, targetUrl, mime, videoId) {
   let target;
   try { target = new URL(targetUrl); } catch { return json(res, 400, { error: 'Geçersiz akış adresi' }); }
   if (!target.hostname.endsWith('.googlevideo.com')) return json(res, 403, { error: 'Bu akış alanına izin verilmiyor' });
-  const headers = { 'User-Agent': USER_AGENT, Accept: req.headers.accept || '*/*' };
-  if (req.headers.range) headers.Range = req.headers.range;
 
   let activeTarget = target;
   let upstream;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
+      const headers = { 'User-Agent': getStreamUserAgent(activeTarget), Accept: req.headers.accept || '*/*' };
+      if (req.headers.range) headers.Range = req.headers.range;
       upstream = await fetch(activeTarget, { method: req.method, headers, signal: AbortSignal.timeout(30_000) });
       if ((upstream.status === 403 || upstream.status === 410) && videoId && attempt === 0) {
         const refreshed = await resolveAudio(videoId, true);
@@ -302,14 +338,14 @@ async function downloadTrack(req, res, dependencies = {}) {
 
     let activeUrl = stream.url;
     let upstream = await (dependencies.fetch || fetch)(activeUrl, {
-      headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+      headers: { 'User-Agent': getStreamUserAgent(activeUrl), Accept: '*/*' },
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]),
     });
     if ((upstream.status === 403 || upstream.status === 410) && (track.videoId || track.id)) {
       const refreshed = await (dependencies.resolveAudio || resolveAudio)(track.videoId || track.id, true);
       activeUrl = refreshed.url;
       upstream = await (dependencies.fetch || fetch)(activeUrl, {
-        headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+        headers: { 'User-Agent': getStreamUserAgent(activeUrl), Accept: '*/*' },
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]),
       });
     }

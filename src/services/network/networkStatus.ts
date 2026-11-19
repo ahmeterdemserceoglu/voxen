@@ -1,47 +1,53 @@
 import * as Network from 'expo-network';
-import { mutationQueue } from '../sync/mutationQueue';
+import { syncService } from '../sync/syncService';
 import { logger } from '../../utils/logger';
 
 const TAG = 'NetworkStatus';
 
-let isCurrentlyOnline = true;
+let isCurrentlyOnline: boolean | null = null;
 
 export const networkStatus = {
-  isOnline: (): boolean => isCurrentlyOnline,
+  isOnline: (): boolean => isCurrentlyOnline === true,
 
-  checkConnection: async (): Promise<boolean> => {
+  checkConnection: async (): Promise<boolean | null> => {
     try {
       const state = await Network.getNetworkStateAsync();
-      isCurrentlyOnline = !!(state.isConnected && state.isInternetReachable !== false);
+      isCurrentlyOnline = state.isConnected === true && state.isInternetReachable !== false;
+      syncService.setOnline(isCurrentlyOnline);
       return isCurrentlyOnline;
-    } catch {
-      return true; // Default optimistic
+    } catch (error) {
+      logger.warn(TAG, 'Could not determine network status', error);
+      return isCurrentlyOnline;
     }
   },
 
-  /**
-   * Initializes periodic network polling or checks and flushes offline mutations
-   * when the connection transitions from offline to online.
-   */
   startMonitoring: (onStatusChange?: (online: boolean) => void): (() => void) => {
-    const interval = setInterval(async () => {
-      const wasOnline = isCurrentlyOnline;
-      const nowOnline = await networkStatus.checkConnection();
-
-      if (!wasOnline && nowOnline) {
-        logger.info(TAG, 'Connection restored! Flushing pending offline mutations...');
-        // Process offline mutation queue
-        const pending = await mutationQueue.load();
-        if (pending.length > 0) {
-          logger.info(TAG, `Found ${pending.length} pending mutations to sync`);
+    let active = true;
+    let hasInitialStatus = false;
+    let checking = false;
+    const check = async () => {
+      if (!active || checking) return;
+      checking = true;
+      try {
+        const wasOnline = isCurrentlyOnline;
+        const nowOnline = await networkStatus.checkConnection();
+        if (!active || nowOnline === null) return;
+        if (!hasInitialStatus || wasOnline !== nowOnline) {
+          hasInitialStatus = true;
+          if (wasOnline === false && nowOnline) {
+            logger.info(TAG, 'Connection restored; syncing pending changes');
+          }
+          onStatusChange?.(nowOnline);
         }
+      } finally {
+        checking = false;
       }
-
-      if (wasOnline !== nowOnline) {
-        onStatusChange?.(nowOnline);
-      }
-    }, 15000);
-
-    return () => clearInterval(interval);
+    };
+    void check();
+    const interval = setInterval(() => void check(), 15000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   },
 };
